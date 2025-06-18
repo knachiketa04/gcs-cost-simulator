@@ -34,6 +34,7 @@ streamlit run streamlit_app/app.py
 - **Large Object Percentage**: Percentage of data eligible for Autoclass transitions
 
 ### Access Patterns
+- **Standard Tier Hotness**: Percentage of Standard data that remains actively accessed (stays hot vs becomes cold)
 - **Nearline Access Rate**: Monthly access percentage for Nearline data
 - **Coldline Access Rate**: Monthly access percentage for Coldline data  
 - **Archive Access Rate**: Monthly access percentage for Archive data

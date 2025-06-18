@@ -28,8 +28,16 @@ monthly_write = st.sidebar.number_input("Monthly New Data Written (GB)", min_val
 
 st.sidebar.header("Object Characteristics")
 percent_large_objects = st.sidebar.slider("% of Data >128 KiB (Autoclass Eligible)", 0, 100, 80) / 100
-avg_object_size_large_kib = st.sidebar.number_input("Average Object Size for Data >128 KiB (KiB)", min_value=129, value=512)
-avg_object_size_small_kib = st.sidebar.number_input("Average Object Size for Data ≤128 KiB (KiB)", min_value=1, max_value=128, value=64)
+
+# Conditionally show object size inputs based on percentage
+avg_object_size_large_kib = 512  # Default value
+avg_object_size_small_kib = 64   # Default value
+
+if percent_large_objects > 0:  # Show large object size input if there's any eligible data
+    avg_object_size_large_kib = st.sidebar.number_input("Average Object Size for Data >128 KiB (KiB)", min_value=129, value=512)
+
+if percent_large_objects < 1:  # Show small object size input if there's any non-eligible data
+    avg_object_size_small_kib = st.sidebar.number_input("Average Object Size for Data ≤128 KiB (KiB)", min_value=1, max_value=128, value=64)
 
 st.sidebar.header("Monthly Access Rates")
 nearline_read_rate = st.sidebar.slider("Nearline (% accessed/month)", 0, 100, 20) / 100

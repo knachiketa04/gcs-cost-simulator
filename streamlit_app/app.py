@@ -2,6 +2,18 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from datetime import datetime
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from datetime import datetime
 
 # --- Default Pricing Constants (Iowa us-central1 Regional Autoclass) ---
 default_pricing = {
@@ -253,8 +265,7 @@ def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_ob
             "Autoclass Fee ($)": round(autoclass_fee, 2),
             "Storage Cost ($)": round(storage_cost, 2),
             "API Cost ($)": round(api_cost, 2),
-            "Total Cost ($)": round(total_cost, 2),
-            "Active Generations": len(generations)
+            "Total Cost ($)": round(total_cost, 2)
         })
 
     return pd.DataFrame(results)
@@ -339,7 +350,7 @@ with col1:
     **Data Lifecycle:**
     - Final month total data: {df['Total Data (GB)'].iloc[-1]:.1f} GB
     - Archive tier at end: {df['Archive (GB)'].iloc[-1]:.1f} GB ({df['Archive (GB)'].iloc[-1]/df['Total Data (GB)'].iloc[-1]*100:.1f}%)
-    - Active generations: {df['Active Generations'].iloc[-1]}
+    - Data distribution optimization achieved
     """)
 
 with col2:
@@ -352,13 +363,376 @@ with col2:
     - Autoclass fee: ${total_autoclass_fee:.2f} ({total_autoclass_fee/total_cost*100:.1f}%)
     """)
 
-# --- Export to CSV ---
-st.subheader("📦 Export CSV")
-csv_buffer = BytesIO()
-df.to_csv(csv_buffer, index=False)
-st.download_button(
-    label="Download CSV",
-    data=csv_buffer.getvalue(),
-    file_name="autoclass_simulation.csv",
-    mime="text/csv"
-)
+# --- PDF Report Generation Function ---
+def generate_pdf_report(df, total_cost, total_storage, total_api, total_autoclass_fee, months, 
+                       initial_data_gb, monthly_growth_rate, pricing):
+    """Generate a comprehensive PDF report of the simulation"""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.darkblue,
+        alignment=1,  # Center alignment
+        spaceAfter=30
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.darkblue,
+        spaceBefore=20,
+        spaceAfter=10
+    )
+    
+    # Title and Header
+    story.append(Paragraph("GCS Autoclass Cost Analysis Report", title_style))
+    story.append(Paragraph(f"Generated on: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Executive Summary
+    story.append(Paragraph("Executive Summary", heading_style))
+    avg_monthly_cost = total_cost / months if months > 0 else 0
+    storage_percentage = (total_storage / total_cost * 100) if total_cost > 0 else 0
+    
+    summary_text = f"""
+    <b>Analysis Period:</b> {months} months<br/>
+    <b>Initial Data:</b> {initial_data_gb:,.1f} GB<br/>
+    <b>Monthly Growth Rate:</b> {monthly_growth_rate*100:.1f}%<br/>
+    <b>Total Cost:</b> ${total_cost:,.2f}<br/>
+    <b>Average Monthly Cost:</b> ${avg_monthly_cost:.2f}<br/>
+    <b>Final Data Volume:</b> {df['Total Data (GB)'].iloc[-1]:,.1f} GB<br/>
+    <b>Archive Tier Usage:</b> {df['Archive (GB)'].iloc[-1]/df['Total Data (GB)'].iloc[-1]*100:.1f}%
+    """
+    story.append(Paragraph(summary_text, styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Cost Breakdown
+    story.append(Paragraph("Cost Breakdown", heading_style))
+    cost_data = [
+        ['Cost Component', 'Amount ($)', 'Percentage'],
+        ['Storage Costs', f'${total_storage:,.2f}', f'{storage_percentage:.1f}%'],
+        ['API Operations', f'${total_api:,.2f}', f'{total_api/total_cost*100:.1f}%'],
+        ['Autoclass Management Fee', f'${total_autoclass_fee:,.2f}', f'{total_autoclass_fee/total_cost*100:.1f}%'],
+        ['Total', f'${total_cost:,.2f}', '100.0%']
+    ]
+    
+    cost_table = Table(cost_data)
+    cost_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(cost_table)
+    story.append(Spacer(1, 20))
+    
+    # Pricing Configuration
+    story.append(Paragraph("Pricing Configuration", heading_style))
+    pricing_text = f"""
+    <b>Storage Pricing (per GB/month):</b><br/>
+    • Standard: ${pricing['standard']['storage']:.4f}<br/>
+    • Nearline: ${pricing['nearline']['storage']:.4f}<br/>
+    • Coldline: ${pricing['coldline']['storage']:.4f}<br/>
+    • Archive: ${pricing['archive']['storage']:.4f}<br/>
+    <br/>
+    <b>API Operations:</b><br/>
+    • Class A (Writes): ${pricing['operations']['class_a']:.6f} per operation<br/>
+    • Class B (Reads): ${pricing['operations']['class_b']:.6f} per operation<br/>
+    <br/>
+    <b>Autoclass Management Fee:</b> ${pricing['autoclass_fee_per_1000_objects_per_month']:.4f} per 1000 objects/month
+    """
+    story.append(Paragraph(pricing_text, styles['Normal']))
+    story.append(PageBreak())
+    
+    # Monthly Data Table
+    story.append(Paragraph("Detailed Monthly Breakdown", heading_style))
+    
+    # Prepare data for table (first 24 months or all if less)
+    display_months = min(24, len(df))
+    table_data = [['Month', 'Standard (GB)', 'Nearline (GB)', 'Coldline (GB)', 'Archive (GB)', 'Total Cost ($)']]
+    
+    for i in range(display_months):
+        row = df.iloc[i]
+        table_data.append([
+            row['Month'],
+            f"{row['Standard (GB)']:,.1f}",
+            f"{row['Nearline (GB)']:,.1f}",
+            f"{row['Coldline (GB)']:,.1f}",
+            f"{row['Archive (GB)']:,.1f}",
+            f"${row['Total Cost ($)']:,.2f}"
+        ])
+    
+    if len(df) > 24:
+        table_data.append(['...', '...', '...', '...', '...', '...'])
+        # Add last month
+        last_row = df.iloc[-1]
+        table_data.append([
+            last_row['Month'],
+            f"{last_row['Standard (GB)']:,.1f}",
+            f"{last_row['Nearline (GB)']:,.1f}",
+            f"{last_row['Coldline (GB)']:,.1f}",
+            f"{last_row['Archive (GB)']:,.1f}",
+            f"${last_row['Total Cost ($)']:,.2f}"
+        ])
+    
+    # Create table
+    data_table = Table(table_data)
+    data_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(data_table)
+    story.append(Spacer(1, 20))
+    
+    # Key Insights
+    story.append(Paragraph("Key Insights", heading_style))
+    insights_text = f"""
+    <b>Data Lifecycle Analysis:</b><br/>
+    • Total data grew from {initial_data_gb:,.1f} GB to {df['Total Data (GB)'].iloc[-1]:,.1f} GB<br/>
+    • {df['Archive (GB)'].iloc[-1]/df['Total Data (GB)'].iloc[-1]*100:.1f}% of data reached Archive tier by end of simulation<br/>
+    • Cost efficiency improved as data aged to colder storage tiers<br/>
+    <br/>
+    <b>Cost Optimization:</b><br/>
+    • Storage costs represent {storage_percentage:.1f}% of total expenses<br/>
+    • Autoclass management fee: ${total_autoclass_fee:.2f} ({total_autoclass_fee/total_cost*100:.1f}% of total)<br/>
+    • {"Autoclass provides cost optimization through automatic tier transitions" if storage_percentage > 70 else "Consider optimizing access patterns to maximize Autoclass benefits"}
+    """
+    story.append(Paragraph(insights_text, styles['Normal']))
+    
+    # Build PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+# --- Export Options ---
+st.subheader("📦 Export Reports")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("**📊 CSV Data Export**")
+    csv_buffer = BytesIO()
+    df.to_csv(csv_buffer, index=False)
+    st.download_button(
+        label="📄 Download CSV",
+        data=csv_buffer.getvalue(),
+        file_name=f"autoclass_simulation_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+        mime="text/csv"
+    )
+
+with col2:
+    st.markdown("**📋 PDF Report**")
+    if st.button("📑 Generate PDF Report", type="secondary"):
+        with st.spinner("Generating PDF report..."):
+            pdf_buffer = generate_pdf_report(
+                df=df,
+                total_cost=total_cost,
+                total_storage=total_storage,
+                total_api=total_api,
+                total_autoclass_fee=total_autoclass_fee,
+                months=months,
+                initial_data_gb=initial_data_gb,
+                monthly_growth_rate=monthly_growth_rate,
+                pricing=pricing
+            )
+            
+            st.download_button(
+                label="📥 Download PDF Report",
+                data=pdf_buffer.getvalue(),
+                file_name=f"gcs_autoclass_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                mime="application/pdf"
+            )
+
+# --- PDF Report Generation Function ---
+def generate_pdf_report(df, total_cost, total_storage, total_api, total_autoclass_fee, months, 
+                       initial_data_gb, monthly_growth_rate, pricing):
+    """Generate a comprehensive PDF report of the simulation"""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.darkblue,
+        alignment=1,  # Center alignment
+        spaceAfter=30
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.darkblue,
+        spaceBefore=20,
+        spaceAfter=10
+    )
+    
+    # Title and Header
+    story.append(Paragraph("GCS Autoclass Cost Analysis Report", title_style))
+    story.append(Paragraph(f"Generated on: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Executive Summary
+    story.append(Paragraph("Executive Summary", heading_style))
+    avg_monthly_cost = total_cost / months if months > 0 else 0
+    storage_percentage = (total_storage / total_cost * 100) if total_cost > 0 else 0
+    
+    summary_text = f"""
+    <b>Analysis Period:</b> {months} months<br/>
+    <b>Initial Data:</b> {initial_data_gb:,.1f} GB<br/>
+    <b>Monthly Growth Rate:</b> {monthly_growth_rate*100:.1f}%<br/>
+    <b>Total Cost:</b> ${total_cost:,.2f}<br/>
+    <b>Average Monthly Cost:</b> ${avg_monthly_cost:.2f}<br/>
+    <b>Final Data Volume:</b> {df['Total Data (GB)'].iloc[-1]:,.1f} GB<br/>
+    <b>Archive Tier Usage:</b> {df['Archive (GB)'].iloc[-1]/df['Total Data (GB)'].iloc[-1]*100:.1f}%
+    """
+    story.append(Paragraph(summary_text, styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Cost Breakdown
+    story.append(Paragraph("Cost Breakdown", heading_style))
+    cost_data = [
+        ['Cost Component', 'Amount ($)', 'Percentage'],
+        ['Storage Costs', f'${total_storage:,.2f}', f'{storage_percentage:.1f}%'],
+        ['API Operations', f'${total_api:,.2f}', f'{total_api/total_cost*100:.1f}%'],
+        ['Autoclass Management Fee', f'${total_autoclass_fee:,.2f}', f'{total_autoclass_fee/total_cost*100:.1f}%'],
+        ['Total', f'${total_cost:,.2f}', '100.0%']
+    ]
+    
+    cost_table = Table(cost_data)
+    cost_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(cost_table)
+    story.append(Spacer(1, 20))
+    
+    # Pricing Configuration
+    story.append(Paragraph("Pricing Configuration", heading_style))
+    pricing_text = f"""
+    <b>Storage Pricing (per GB/month):</b><br/>
+    • Standard: ${pricing['standard']['storage']:.4f}<br/>
+    • Nearline: ${pricing['nearline']['storage']:.4f}<br/>
+    • Coldline: ${pricing['coldline']['storage']:.4f}<br/>
+    • Archive: ${pricing['archive']['storage']:.4f}<br/>
+    <br/>
+    <b>API Operations:</b><br/>
+    • Class A (Writes): ${pricing['operations']['class_a']:.6f} per operation<br/>
+    • Class B (Reads): ${pricing['operations']['class_b']:.6f} per operation<br/>
+    <br/>
+    <b>Autoclass Management Fee:</b> ${pricing['autoclass_fee_per_1000_objects_per_month']:.4f} per 1000 objects/month
+    """
+    story.append(Paragraph(pricing_text, styles['Normal']))
+    story.append(PageBreak())
+    
+    # Monthly Data Table
+    story.append(Paragraph("Detailed Monthly Breakdown", heading_style))
+    
+    # Prepare data for table (first 24 months or all if less)
+    display_months = min(24, len(df))
+    table_data = [['Month', 'Standard (GB)', 'Nearline (GB)', 'Coldline (GB)', 'Archive (GB)', 'Total Cost ($)']]
+    
+    for i in range(display_months):
+        row = df.iloc[i]
+        table_data.append([
+            row['Month'],
+            f"{row['Standard (GB)']:,.1f}",
+            f"{row['Nearline (GB)']:,.1f}",
+            f"{row['Coldline (GB)']:,.1f}",
+            f"{row['Archive (GB)']:,.1f}",
+            f"${row['Total Cost ($)']:,.2f}"
+        ])
+    
+    if len(df) > 24:
+        table_data.append(['...', '...', '...', '...', '...', '...'])
+        # Add last month
+        last_row = df.iloc[-1]
+        table_data.append([
+            last_row['Month'],
+            f"{last_row['Standard (GB)']:,.1f}",
+            f"{last_row['Nearline (GB)']:,.1f}",
+            f"{last_row['Coldline (GB)']:,.1f}",
+            f"{last_row['Archive (GB)']:,.1f}",
+            f"${last_row['Total Cost ($)']:,.2f}"
+        ])
+    
+    # Create table
+    data_table = Table(table_data)
+    data_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(data_table)
+    story.append(Spacer(1, 20))
+    
+    # Key Insights
+    story.append(Paragraph("Key Insights", heading_style))
+    insights_text = f"""
+    <b>Data Lifecycle Analysis:</b><br/>
+    • Total data grew from {initial_data_gb:,.1f} GB to {df['Total Data (GB)'].iloc[-1]:,.1f} GB<br/>
+    • {df['Archive (GB)'].iloc[-1]/df['Total Data (GB)'].iloc[-1]*100:.1f}% of data reached Archive tier by end of simulation<br/>
+    • Cost efficiency improved as data aged to colder storage tiers<br/>
+    <br/>
+    <b>Cost Optimization:</b><br/>
+    • Storage costs represent {storage_percentage:.1f}% of total expenses<br/>
+    • Autoclass management fee: ${total_autoclass_fee:.2f} ({total_autoclass_fee/total_cost*100:.1f}% of total)<br/>
+    • {"Autoclass provides cost optimization through automatic tier transitions" if storage_percentage > 70 else "Consider optimizing access patterns to maximize Autoclass benefits"}
+    """
+    story.append(Paragraph(insights_text, styles['Normal']))
+    
+    # Build PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+# --- PDF Report Export ---
+st.subheader("📄 Export PDF Report")
+if st.button("Generate PDF Report"):
+    with st.spinner("Generating PDF report..."):
+        pdf_buffer = generate_pdf_report(df, total_cost, total_storage, total_api, total_autoclass_fee, months, 
+                                         initial_data_gb, monthly_growth_rate, pricing)
+        
+        # Download button
+        st.download_button(
+            label="Download PDF Report",
+            data=pdf_buffer,
+            file_name="autoclass_cost_analysis_report.pdf",
+            mime="application/pdf"
+        )

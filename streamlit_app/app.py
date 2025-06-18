@@ -9,6 +9,40 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from datetime import datetime
 
+# --- Utility Functions for Unit Formatting ---
+def format_storage_value(gb_value):
+    """Format storage value with appropriate units (GB or TiB)"""
+    if gb_value >= 1024:  # 1 TiB = 1024 GB
+        tib_value = gb_value / 1024
+        if tib_value >= 1000:
+            return f"{tib_value:,.1f} TiB"
+        else:
+            return f"{tib_value:.2f} TiB"
+    else:
+        return f"{gb_value:.2f} GB"
+
+def format_cost_value(cost):
+    """Format cost value with appropriate units ($ or $M)"""
+    if cost >= 1000000:  # 1 million or more
+        million_value = cost / 1000000
+        return f"${million_value:.2f}M"
+    else:
+        return f"${cost:,.2f}"
+
+def get_storage_unit_and_value(gb_value):
+    """Get storage unit and converted value for display"""
+    if gb_value >= 1024:  # Use TiB for large values
+        return gb_value / 1024, "TiB"
+    else:
+        return gb_value, "GB"
+
+def get_cost_unit_and_value(cost):
+    """Get cost unit and converted value for display"""
+    if cost >= 1000000:  # Use millions for large costs
+        return cost / 1000000, "M"
+    else:
+        return cost, ""
+
 # --- Default Pricing Constants (Iowa us-central1 Regional Autoclass) ---
 default_pricing = {
     "standard": {"storage": 0.020, "min_storage_days": 0},
@@ -369,8 +403,12 @@ def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_ob
         # Calculate total data across all classes
         total_data = sum(storage_classes.values())
 
+        # Determine appropriate units for display
+        storage_unit_value, storage_unit = get_storage_unit_and_value(total_data)
+        
         results.append({
             "Month": f"Month {month}",
+            # Raw values for calculations (always in GB and $)
             "Standard (GB)": round(storage_classes["standard"], 2),
             "Nearline (GB)": round(storage_classes["nearline"], 2),
             "Coldline (GB)": round(storage_classes["coldline"], 2),
@@ -381,7 +419,17 @@ def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_ob
             "Autoclass Fee ($)": round(autoclass_fee, 2),
             "Storage Cost ($)": round(storage_cost, 2),
             "API Cost ($)": round(api_cost, 2),
-            "Total Cost ($)": round(total_cost, 2)
+            "Total Cost ($)": round(total_cost, 2),
+            # Formatted values for display
+            "Standard (Formatted)": format_storage_value(storage_classes["standard"]),
+            "Nearline (Formatted)": format_storage_value(storage_classes["nearline"]),
+            "Coldline (Formatted)": format_storage_value(storage_classes["coldline"]),
+            "Archive (Formatted)": format_storage_value(storage_classes["archive"]),
+            "Total Data (Formatted)": format_storage_value(total_data),
+            "Autoclass Fee (Formatted)": format_cost_value(autoclass_fee),
+            "Storage Cost (Formatted)": format_cost_value(storage_cost),
+            "API Cost (Formatted)": format_cost_value(api_cost),
+            "Total Cost (Formatted)": format_cost_value(total_cost)
         })
 
     return pd.DataFrame(results)
@@ -408,11 +456,23 @@ with st.spinner("Running simulation...") if months > 24 else st.empty():
 
 # --- Display Table ---
 st.subheader("📊 Monthly Breakdown")
-st.dataframe(df)
+
+# Create a display dataframe with formatted values
+display_df = df[["Month", "Standard (Formatted)", "Nearline (Formatted)", "Coldline (Formatted)", 
+                 "Archive (Formatted)", "Total Data (Formatted)", "Total Eligible Objects", 
+                 "Total Non-Eligible Objects", "Autoclass Fee (Formatted)", "Storage Cost (Formatted)", 
+                 "API Cost (Formatted)", "Total Cost (Formatted)"]].copy()
+
+# Rename columns for better display
+display_df.columns = ["Month", "Standard", "Nearline", "Coldline", "Archive", "Total Data", 
+                     "Eligible Objects", "Non-Eligible Objects", "Autoclass Fee", "Storage Cost", 
+                     "API Cost", "Total Cost"]
+
+st.dataframe(display_df)
 
 # --- Summary & Cost ---
 total_cost = df["Total Cost ($)"].sum()
-st.markdown(f"### 💰 Total {months}-Month Cost: **${total_cost:.2f}**")
+st.markdown(f"### 💰 Total {months}-Month Cost: **{format_cost_value(total_cost)}**")
 
 # --- Cost Breakdown Summary ---
 st.subheader("💸 Cost Breakdown Summary")
@@ -422,33 +482,69 @@ total_autoclass_fee = df["Autoclass Fee ($)"].sum()
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Storage Cost", f"${total_storage:.2f}")
-    st.metric("API Cost", f"${total_api:.2f}")
+    st.metric("Storage Cost", format_cost_value(total_storage))
+    st.metric("API Cost", format_cost_value(total_api))
 with col2:
-    st.metric("Autoclass Fee", f"${total_autoclass_fee:.2f}")
+    st.metric("Autoclass Fee", format_cost_value(total_autoclass_fee))
 with col3:
-    st.metric("**Total Cost**", f"**${total_cost:.2f}**")
+    st.metric("**Total Cost**", f"**{format_cost_value(total_cost)}**")
 
 # --- Static Chart: Tier Growth ---
 st.subheader("🪄 Tier-wise Data Growth Over Time")
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
 
+# Determine appropriate storage unit for chart
+max_total_data = df["Total Data (GB)"].max()
+storage_unit_factor, storage_unit = get_storage_unit_and_value(max_total_data)
+
+# Convert data for chart display
+if storage_unit == "TiB":
+    chart_data_standard = df["Standard (GB)"] / 1024
+    chart_data_nearline = df["Nearline (GB)"] / 1024
+    chart_data_coldline = df["Coldline (GB)"] / 1024
+    chart_data_archive = df["Archive (GB)"] / 1024
+    chart_data_total = df["Total Data (GB)"] / 1024
+    storage_label = "TiB Stored"
+else:
+    chart_data_standard = df["Standard (GB)"]
+    chart_data_nearline = df["Nearline (GB)"]
+    chart_data_coldline = df["Coldline (GB)"]
+    chart_data_archive = df["Archive (GB)"]
+    chart_data_total = df["Total Data (GB)"]
+    storage_label = "GB Stored"
+
 # Data distribution chart
-ax1.plot(df["Month"], df["Standard (GB)"], label="Standard", linewidth=2)
-ax1.plot(df["Month"], df["Nearline (GB)"], label="Nearline", linewidth=2)
-ax1.plot(df["Month"], df["Coldline (GB)"], label="Coldline", linewidth=2)
-ax1.plot(df["Month"], df["Archive (GB)"], label="Archive", linewidth=2)
-ax1.plot(df["Month"], df["Total Data (GB)"], label="Total", linestyle="--", alpha=0.7)
-ax1.set_ylabel("GB Stored")
+ax1.plot(df["Month"], chart_data_standard, label="Standard", linewidth=2)
+ax1.plot(df["Month"], chart_data_nearline, label="Nearline", linewidth=2)
+ax1.plot(df["Month"], chart_data_coldline, label="Coldline", linewidth=2)
+ax1.plot(df["Month"], chart_data_archive, label="Archive", linewidth=2)
+ax1.plot(df["Month"], chart_data_total, label="Total", linestyle="--", alpha=0.7)
+ax1.set_ylabel(storage_label)
 ax1.set_title("Data Distribution Across Storage Classes")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
+# Determine appropriate cost unit for chart
+max_total_cost = df["Total Cost ($)"].max()
+cost_unit_factor, cost_unit = get_cost_unit_and_value(max_total_cost)
+
+# Convert cost data for chart display
+if cost_unit == "M":
+    chart_cost_storage = df["Storage Cost ($)"] / 1000000
+    chart_cost_autoclass = df["Autoclass Fee ($)"] / 1000000
+    chart_cost_total = df["Total Cost ($)"] / 1000000
+    cost_label = "Cost ($M)"
+else:
+    chart_cost_storage = df["Storage Cost ($)"]
+    chart_cost_autoclass = df["Autoclass Fee ($)"]
+    chart_cost_total = df["Total Cost ($)"]
+    cost_label = "Cost ($)"
+
 # Cost breakdown chart
-ax2.plot(df["Month"], df["Storage Cost ($)"], label="Storage", linewidth=2)
-ax2.plot(df["Month"], df["Autoclass Fee ($)"], label="Autoclass Fee", linewidth=2)
-ax2.plot(df["Month"], df["Total Cost ($)"], label="Total", linestyle="--", alpha=0.7)
-ax2.set_ylabel("Cost ($)")
+ax2.plot(df["Month"], chart_cost_storage, label="Storage", linewidth=2)
+ax2.plot(df["Month"], chart_cost_autoclass, label="Autoclass Fee", linewidth=2)
+ax2.plot(df["Month"], chart_cost_total, label="Total", linestyle="--", alpha=0.7)
+ax2.set_ylabel(cost_label)
 ax2.set_xlabel("Month")
 ax2.set_title("Monthly Cost Breakdown")
 ax2.legend()
@@ -463,21 +559,27 @@ st.subheader("🔍 Key Insights")
 col1, col2 = st.columns(2)
 
 with col1:
+    final_total_data = df['Total Data (GB)'].iloc[-1]
+    final_archive_data = df['Archive (GB)'].iloc[-1]
+    archive_percentage = (final_archive_data/final_total_data*100) if final_total_data > 0 else 0
+    
     st.info(f"""
     **Data Lifecycle:**
-    - Final month total data: {df['Total Data (GB)'].iloc[-1]:.1f} GB
-    - Archive tier at end: {df['Archive (GB)'].iloc[-1]:.1f} GB ({df['Archive (GB)'].iloc[-1]/df['Total Data (GB)'].iloc[-1]*100:.1f}%)
+    - Final month total data: {format_storage_value(final_total_data)}
+    - Archive tier at end: {format_storage_value(final_archive_data)} ({archive_percentage:.1f}%)
     - Data distribution optimization achieved
     """)
 
 with col2:
     avg_monthly_cost = total_cost / months
     storage_percentage = (total_storage / total_cost * 100) if total_cost > 0 else 0
+    autoclass_percentage = (total_autoclass_fee/total_cost*100) if total_cost > 0 else 0
+    
     st.info(f"""
     **Cost Analysis:**
-    - Average monthly cost: ${avg_monthly_cost:.2f}
+    - Average monthly cost: {format_cost_value(avg_monthly_cost)}
     - Storage costs: {storage_percentage:.1f}% of total
-    - Autoclass fee: ${total_autoclass_fee:.2f} ({total_autoclass_fee/total_cost*100:.1f}%)
+    - Autoclass fee: {format_cost_value(total_autoclass_fee)} ({autoclass_percentage:.1f}%)
     """)
 
 # --- PDF Report Generation Function ---
@@ -519,14 +621,19 @@ def generate_pdf_report(df, total_cost, total_storage, total_api, total_autoclas
     avg_monthly_cost = total_cost / months if months > 0 else 0
     storage_percentage = (total_storage / total_cost * 100) if total_cost > 0 else 0
     
+    # Format values for PDF
+    final_data_gb = df['Total Data (GB)'].iloc[-1]
+    final_archive_gb = df['Archive (GB)'].iloc[-1]
+    archive_percentage = (final_archive_gb/final_data_gb*100) if final_data_gb > 0 else 0
+    
     summary_text = f"""
     <b>Analysis Period:</b> {months} months<br/>
-    <b>Initial Data:</b> {initial_data_gb:,.1f} GB<br/>
+    <b>Initial Data:</b> {format_storage_value(initial_data_gb)}<br/>
     <b>Monthly Growth Rate:</b> {monthly_growth_rate*100:.1f}%<br/>
-    <b>Total Cost:</b> ${total_cost:,.2f}<br/>
-    <b>Average Monthly Cost:</b> ${avg_monthly_cost:.2f}<br/>
-    <b>Final Data Volume:</b> {df['Total Data (GB)'].iloc[-1]:,.1f} GB<br/>
-    <b>Archive Tier Usage:</b> {df['Archive (GB)'].iloc[-1]/df['Total Data (GB)'].iloc[-1]*100:.1f}%<br/>
+    <b>Total Cost:</b> {format_cost_value(total_cost)}<br/>
+    <b>Average Monthly Cost:</b> {format_cost_value(avg_monthly_cost)}<br/>
+    <b>Final Data Volume:</b> {format_storage_value(final_data_gb)}<br/>
+    <b>Archive Tier Usage:</b> {archive_percentage:.1f}%<br/>
     <br/>
     <b>Access Pattern Summary:</b><br/>
     • Standard Hot Data: {standard_access_rate*100:.1f}% stays hot<br/>
@@ -540,11 +647,11 @@ def generate_pdf_report(df, total_cost, total_storage, total_api, total_autoclas
     # Cost Breakdown
     story.append(Paragraph("Cost Breakdown", heading_style))
     cost_data = [
-        ['Cost Component', 'Amount ($)', 'Percentage'],
-        ['Storage Costs', f'${total_storage:,.2f}', f'{storage_percentage:.1f}%'],
-        ['API Operations', f'${total_api:,.2f}', f'{total_api/total_cost*100:.1f}%'],
-        ['Autoclass Management Fee', f'${total_autoclass_fee:,.2f}', f'{total_autoclass_fee/total_cost*100:.1f}%'],
-        ['Total', f'${total_cost:,.2f}', '100.0%']
+        ['Cost Component', 'Amount', 'Percentage'],
+        ['Storage Costs', format_cost_value(total_storage), f'{storage_percentage:.1f}%'],
+        ['API Operations', format_cost_value(total_api), f'{total_api/total_cost*100:.1f}%'],
+        ['Autoclass Management Fee', format_cost_value(total_autoclass_fee), f'{total_autoclass_fee/total_cost*100:.1f}%'],
+        ['Total', format_cost_value(total_cost), '100.0%']
     ]
     
     cost_table = Table(cost_data)
@@ -623,33 +730,71 @@ def generate_pdf_report(df, total_cost, total_storage, total_api, total_autoclas
     # Monthly Data Table
     story.append(Paragraph("Detailed Monthly Breakdown", heading_style))
     
+    # Determine appropriate units for the table
+    max_data = df['Total Data (GB)'].max()
+    max_cost = df['Total Cost ($)'].max()
+    data_unit = "TiB" if max_data >= 1024 else "GB"
+    cost_unit = "$M" if max_cost >= 1000000 else "$"
+    
     # Prepare data for table (first 24 months or all if less)
     display_months = min(24, len(df))
-    table_data = [['Month', 'Standard (GB)', 'Nearline (GB)', 'Coldline (GB)', 'Archive (GB)', 'Total Cost ($)']]
     
-    for i in range(display_months):
-        row = df.iloc[i]
-        table_data.append([
-            row['Month'],
-            f"{row['Standard (GB)']:,.1f}",
-            f"{row['Nearline (GB)']:,.1f}",
-            f"{row['Coldline (GB)']:,.1f}",
-            f"{row['Archive (GB)']:,.1f}",
-            f"${row['Total Cost ($)']:,.2f}"
-        ])
-    
-    if len(df) > 24:
-        table_data.append(['...', '...', '...', '...', '...', '...'])
-        # Add last month
-        last_row = df.iloc[-1]
-        table_data.append([
-            last_row['Month'],
-            f"{last_row['Standard (GB)']:,.1f}",
-            f"{last_row['Nearline (GB)']:,.1f}",
-            f"{last_row['Coldline (GB)']:,.1f}",
-            f"{last_row['Archive (GB)']:,.1f}",
-            f"${last_row['Total Cost ($)']:,.2f}"
-        ])
+    if data_unit == "TiB":
+        table_data = [['Month', 'Standard (TiB)', 'Nearline (TiB)', 'Coldline (TiB)', 'Archive (TiB)', f'Total Cost ({cost_unit})']]
+        
+        for i in range(display_months):
+            row = df.iloc[i]
+            cost_value = row['Total Cost ($)'] / 1000000 if cost_unit == "$M" else row['Total Cost ($)']
+            table_data.append([
+                row['Month'],
+                f"{row['Standard (GB)']/1024:,.2f}",
+                f"{row['Nearline (GB)']/1024:,.2f}",
+                f"{row['Coldline (GB)']/1024:,.2f}",
+                f"{row['Archive (GB)']/1024:,.2f}",
+                f"{cost_value:,.2f}"
+            ])
+        
+        if len(df) > 24:
+            table_data.append(['...', '...', '...', '...', '...', '...'])
+            # Add last month
+            last_row = df.iloc[-1]
+            last_cost_value = last_row['Total Cost ($)'] / 1000000 if cost_unit == "$M" else last_row['Total Cost ($)']
+            table_data.append([
+                last_row['Month'],
+                f"{last_row['Standard (GB)']/1024:,.2f}",
+                f"{last_row['Nearline (GB)']/1024:,.2f}",
+                f"{last_row['Coldline (GB)']/1024:,.2f}",
+                f"{last_row['Archive (GB)']/1024:,.2f}",
+                f"{last_cost_value:,.2f}"
+            ])
+    else:
+        table_data = [['Month', 'Standard (GB)', 'Nearline (GB)', 'Coldline (GB)', 'Archive (GB)', f'Total Cost ({cost_unit})']]
+        
+        for i in range(display_months):
+            row = df.iloc[i]
+            cost_value = row['Total Cost ($)'] / 1000000 if cost_unit == "$M" else row['Total Cost ($)']
+            table_data.append([
+                row['Month'],
+                f"{row['Standard (GB)']:,.1f}",
+                f"{row['Nearline (GB)']:,.1f}",
+                f"{row['Coldline (GB)']:,.1f}",
+                f"{row['Archive (GB)']:,.1f}",
+                f"{cost_value:,.2f}"
+            ])
+        
+        if len(df) > 24:
+            table_data.append(['...', '...', '...', '...', '...', '...'])
+            # Add last month
+            last_row = df.iloc[-1]
+            last_cost_value = last_row['Total Cost ($)'] / 1000000 if cost_unit == "$M" else last_row['Total Cost ($)']
+            table_data.append([
+                last_row['Month'],
+                f"{last_row['Standard (GB)']:,.1f}",
+                f"{last_row['Nearline (GB)']:,.1f}",
+                f"{last_row['Coldline (GB)']:,.1f}",
+                f"{last_row['Archive (GB)']:,.1f}",
+                f"{last_cost_value:,.2f}"
+            ])
     
     # Create table
     data_table = Table(table_data)
@@ -668,15 +813,20 @@ def generate_pdf_report(df, total_cost, total_storage, total_api, total_autoclas
     
     # Key Insights
     story.append(Paragraph("Key Insights", heading_style))
+    
+    final_data_gb = df['Total Data (GB)'].iloc[-1]
+    final_archive_gb = df['Archive (GB)'].iloc[-1]
+    archive_percentage = (final_archive_gb/final_data_gb*100) if final_data_gb > 0 else 0
+    
     insights_text = f"""
     <b>Data Lifecycle Analysis:</b><br/>
-    • Total data grew from {initial_data_gb:,.1f} GB to {df['Total Data (GB)'].iloc[-1]:,.1f} GB<br/>
-    • {df['Archive (GB)'].iloc[-1]/df['Total Data (GB)'].iloc[-1]*100:.1f}% of data reached Archive tier by end of simulation<br/>
+    • Total data grew from {format_storage_value(initial_data_gb)} to {format_storage_value(final_data_gb)}<br/>
+    • {archive_percentage:.1f}% of data reached Archive tier by end of simulation<br/>
     • Cost efficiency improved as data aged to colder storage tiers<br/>
     <br/>
     <b>Cost Optimization:</b><br/>
     • Storage costs represent {storage_percentage:.1f}% of total expenses<br/>
-    • Autoclass management fee: ${total_autoclass_fee:.2f} ({total_autoclass_fee/total_cost*100:.1f}% of total)<br/>
+    • Autoclass management fee: {format_cost_value(total_autoclass_fee)} ({total_autoclass_fee/total_cost*100:.1f}% of total)<br/>
     • {"Autoclass provides cost optimization through automatic tier transitions" if storage_percentage > 70 else "Consider optimizing access patterns to maximize Autoclass benefits"}
     """
     story.append(Paragraph(insights_text, styles['Normal']))

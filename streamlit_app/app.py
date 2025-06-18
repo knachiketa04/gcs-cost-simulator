@@ -1,11 +1,10 @@
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 
-# --- Pricing Constants (Regional Autoclass) ---
-pricing = {
+# --- Default Pricing Constants (Iowa us-central1 Regional Autoclass) ---
+default_pricing = {
     "standard": {"storage": 0.020, "min_storage_days": 0},
     "nearline": {"storage": 0.010, "min_storage_days": 30},
     "coldline": {"storage": 0.004, "min_storage_days": 90},
@@ -18,14 +17,64 @@ pricing = {
 }
 
 # --- UI ---
-st.title("GCS Autoclass Simulator with Object Tracking and Management Fees")
+st.title("GCS Autoclass Cost Simulator")
+
+# --- Pricing Configuration Section ---
+st.sidebar.header("💰 Pricing Configuration")
+st.sidebar.markdown("*Default: Iowa (us-central1) Regional Autoclass*")
+
+with st.sidebar.expander("Customize Pricing", expanded=False):
+    st.markdown("**Storage Costs ($ per GB per month)**")
+    standard_storage_price = st.number_input("Standard Storage", min_value=0.0, value=default_pricing["standard"]["storage"], step=0.001, format="%.4f")
+    nearline_storage_price = st.number_input("Nearline Storage", min_value=0.0, value=default_pricing["nearline"]["storage"], step=0.001, format="%.4f")
+    coldline_storage_price = st.number_input("Coldline Storage", min_value=0.0, value=default_pricing["coldline"]["storage"], step=0.001, format="%.4f")
+    archive_storage_price = st.number_input("Archive Storage", min_value=0.0, value=default_pricing["archive"]["storage"], step=0.001, format="%.4f")
+    
+    st.markdown("**API Operations ($ per operation)**")
+    class_a_price = st.number_input("Class A Operations (Writes)", min_value=0.0, value=default_pricing["operations"]["class_a"], step=0.000001, format="%.7f")
+    class_b_price = st.number_input("Class B Operations (Reads)", min_value=0.0, value=default_pricing["operations"]["class_b"], step=0.000001, format="%.7f")
+    
+    st.markdown("**Autoclass Management Fee**")
+    autoclass_fee_price = st.number_input("Per 1000 Objects per Month ($)", min_value=0.0, value=default_pricing["autoclass_fee_per_1000_objects_per_month"], step=0.0001, format="%.4f")
+
+# Build current pricing configuration
+pricing = {
+    "standard": {"storage": standard_storage_price, "min_storage_days": 0},
+    "nearline": {"storage": nearline_storage_price, "min_storage_days": 30},
+    "coldline": {"storage": coldline_storage_price, "min_storage_days": 90},
+    "archive": {"storage": archive_storage_price, "min_storage_days": 365},
+    "operations": {
+        "class_a": class_a_price,
+        "class_b": class_b_price
+    },
+    "autoclass_fee_per_1000_objects_per_month": autoclass_fee_price
+}
+
+# Display current pricing summary
+def format_small_number(value):
+    """Format small numbers appropriately"""
+    if value < 0.000001:  # Less than 1 millionth
+        return f"{value:.2e}"  # Scientific notation
+    elif value < 0.001:   # Less than 1 thousandth
+        return f"{value:.7f}".rstrip('0').rstrip('.')  # Remove trailing zeros
+    else:
+        return f"{value:.4f}"
+
+st.sidebar.markdown("**Current Pricing Summary:**")
+st.sidebar.markdown(f"- Standard: ${pricing['standard']['storage']:.4f}/GB/month")
+st.sidebar.markdown(f"- Nearline: ${pricing['nearline']['storage']:.4f}/GB/month")
+st.sidebar.markdown(f"- Coldline: ${pricing['coldline']['storage']:.4f}/GB/month") 
+st.sidebar.markdown(f"- Archive: ${pricing['archive']['storage']:.4f}/GB/month")
+st.sidebar.markdown(f"- Class A Ops: ${format_small_number(pricing['operations']['class_a'])}/op")
+st.sidebar.markdown(f"- Class B Ops: ${format_small_number(pricing['operations']['class_b'])}/op")
+st.sidebar.markdown(f"- Autoclass Fee: ${pricing['autoclass_fee_per_1000_objects_per_month']:.4f}/1K objects/month")
 
 st.sidebar.header("Analysis Period")
 months = st.sidebar.slider("Total Analysis Period (Months)", 12, 60, 12)
 
 st.sidebar.header("Data Growth Pattern")
 initial_data_gb = st.sidebar.number_input("Initial Data Upload (GB)", min_value=0, value=700000, help="Amount of data uploaded in Month 1")
-monthly_growth_rate = st.sidebar.number_input("Monthly Growth Rate (%)", min_value=0.0, max_value=50.0, value=0.0, step=0.1, help="Percentage increase in data each month (0% = no new data)")
+monthly_growth_rate = st.sidebar.number_input("Monthly Growth Rate (%)", min_value=0.0, max_value=50.0, value=0.0, step=0.1, help="Percentage increase in data each month (0% = no new data)") / 100
 
 st.sidebar.header("Object Characteristics")
 percent_large_objects = st.sidebar.slider("% of Data >128 KiB (Autoclass Eligible)", 0, 100, 80) / 100
@@ -99,8 +148,14 @@ def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_ob
         total_non_eligible_objects = cumulative_non_eligible_objects  # Use cumulative count
         new_generations = []
 
-        # Process each generation
-        for gen in generations[:]:  # Use slice to avoid modification during iteration
+        # PERFORMANCE OPTIMIZATION: Process generations in batches and filter early
+        active_generations = []
+        
+        for gen in generations:
+            # Skip tiny generations to reduce processing
+            if gen["size"] < 0.001:  # Less than 1 MB
+                continue
+                
             original_size = gen["size"]
             remaining_size = gen["size"]
             original_objects = gen["objects"]
@@ -120,14 +175,13 @@ def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_ob
                 storage_class = "standard"
                 access_rate = 0  # Standard tier - no access rate needed
 
-            # Handle access and re-promotion (NO RETRIEVAL COSTS in Autoclass)
+            # Handle access and re-promotion (data moves freely in Autoclass)
             if access_rate > 0 and storage_class != "standard":
                 accessed_volume = original_size * access_rate
                 accessed_objects = original_objects * access_rate
                 
                 # Re-promote accessed data to standard (create new generation)
-                # NO retrieval cost in Autoclass - data moves freely back to Standard
-                if accessed_volume > 0:
+                if accessed_volume > 0.001:  # Only create if significant size
                     new_generations.append({
                         "size": accessed_volume,
                         "age_days": 0,
@@ -146,18 +200,37 @@ def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_ob
                 gen["objects"] = remaining_objects
 
             # Add remaining data to appropriate storage class
-            if remaining_size > 0:
+            if remaining_size > 0.001:  # Only process significant sizes
                 storage_classes[storage_class] += remaining_size
                 total_eligible_objects += remaining_objects
-            
-            # Age the generation for next month (do this AFTER processing)
-            gen["age_days"] += 30
+                
+                # Age the generation for next month
+                gen["age_days"] += 30
+                active_generations.append(gen)
 
-        # Add new generations from re-promoted data
-        generations.extend(new_generations)
+        # PERFORMANCE OPTIMIZATION: Replace generations list with only active ones
+        generations = active_generations + new_generations
         
-        # Remove empty generations
-        generations = [gen for gen in generations if gen["size"] > 0]
+        # PERFORMANCE OPTIMIZATION: Limit generations list size (merge old small ones)
+        if len(generations) > 100:  # Arbitrary limit
+            # Sort by size and merge smallest ones into archive
+            generations.sort(key=lambda x: x["size"], reverse=True)
+            large_generations = generations[:80]  # Keep 80 largest
+            small_generations = generations[80:]   # Merge the rest
+            
+            # Merge small generations into one archive generation
+            if small_generations:
+                merged_size = sum(g["size"] for g in small_generations)
+                merged_objects = sum(g["objects"] for g in small_generations)
+                if merged_size > 0:
+                    large_generations.append({
+                        "size": merged_size,
+                        "age_days": 365,  # Force to archive
+                        "objects": merged_objects,
+                        "created_month": month - 12  # Approximate old age
+                    })
+            
+            generations = large_generations
 
         # Calculate costs
         storage_cost = sum(storage_classes[c] * pricing[c]["storage"] for c in storage_classes)
@@ -187,19 +260,23 @@ def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_ob
     return pd.DataFrame(results)
 
 # --- Run Simulation ---
-df = simulate_autoclass_with_objects(
-    initial_data_gb=initial_data_gb,
-    monthly_growth_rate=monthly_growth_rate,
-    avg_object_size_large_kib=avg_object_size_large_kib,
-    avg_object_size_small_kib=avg_object_size_small_kib,
-    percent_large_objects=percent_large_objects,
-    months=months,
-    nearline_read_rate=nearline_read_rate,
-    coldline_read_rate=coldline_read_rate,
-    archive_read_rate=archive_read_rate,
-    reads=reads,
-    writes=writes
-)
+if months > 36:
+    st.info(f"⏳ Running {months}-month simulation... This may take a moment for longer periods.")
+
+with st.spinner("Running simulation...") if months > 24 else st.empty():
+    df = simulate_autoclass_with_objects(
+        initial_data_gb=initial_data_gb,
+        monthly_growth_rate=monthly_growth_rate,
+        avg_object_size_large_kib=avg_object_size_large_kib,
+        avg_object_size_small_kib=avg_object_size_small_kib,
+        percent_large_objects=percent_large_objects,
+        months=months,
+        nearline_read_rate=nearline_read_rate,
+        coldline_read_rate=coldline_read_rate,
+        archive_read_rate=archive_read_rate,
+        reads=reads,
+        writes=writes
+    )
 
 # --- Display Table ---
 st.subheader("📊 Monthly Breakdown")
@@ -274,30 +351,6 @@ with col2:
     - Storage costs: {storage_percentage:.1f}% of total
     - Autoclass fee: ${total_autoclass_fee:.2f} ({total_autoclass_fee/total_cost*100:.1f}%)
     """)
-
-# --- Comparison with Manual Lifecycle ---
-st.subheader("⚖️ Autoclass vs Manual Lifecycle Comparison")
-st.info("""
-**Autoclass Benefits:**
-- Automatic transitions based on access patterns (30, 90, 365 days)
-- Instant re-promotion to Standard on access with NO retrieval costs
-- No need to manage lifecycle policies manually
-- Management fee: $0.0025 per 1000 objects per month for eligible objects
-
-**Manual Lifecycle:**
-- Fixed transition schedules regardless of access
-- No automatic re-promotion
-- Retrieval costs apply when accessing data in colder tiers
-- No management fee
-- Requires careful planning of access patterns
-""")
-
-# --- Data Validation ---
-if total_autoclass_fee > total_storage:
-    st.warning("⚠️ Autoclass management fees exceed storage costs. Consider if Autoclass is cost-effective for your use case.")
-
-if df["Archive (GB)"].iloc[-1] < df["Total Data (GB)"].iloc[-1] * 0.1:
-    st.info("💡 Most data is staying in higher tiers. Consider reviewing access patterns or object sizes.")
 
 # --- Export to CSV ---
 st.subheader("📦 Export CSV")

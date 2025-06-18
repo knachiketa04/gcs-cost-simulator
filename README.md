@@ -1,31 +1,19 @@
 
-# 🚀 GCS Autoclass Simulator
+# 🚀 GCS Autoclass Cost Simulator
 
-A comprehensive visual and interactive Streamlit application to simulate Google Cloud Storage (GCS) Autoclass behavior with accurate cost modeling, including:
+A comprehensive interactive Streamlit application to simulate Google Cloud Storage (GCS) Autoclass behavior with accurate cost modeling and lifecycle transitions.
 
-- **Flexible Analysis Periods**: 12-60 months for long-term TCO planning
-- **Accurate Storage Class Transitions**: Standard → Nearline (30 days) → Coldline (90 days) → Archive (365 days)
-- **Smart Access-triggered Re-promotion**: Instant promotion back to Standard on data access
-- **Autoclass Management Fee Calculation**: Based on object eligibility (>128 KiB only)
-- **Early Deletion Fees**: For data accessed before minimum storage duration
-- **Generation-based Object Tracking**: Proper lifecycle modeling with object aging
-- **Comprehensive Cost Breakdown**: Storage, retrieval, API operations, management fees
-- **Advanced Visualizations**: Data distribution and cost trends over time
+## ✨ Key Features
 
-## 📦 Enhanced Features
+- **Accurate GCS Autoclass Modeling**: Proper data transitions (Standard → Nearline → Coldline → Archive)
+- **Flexible Growth Patterns**: Both fixed data scenarios and percentage-based growth models
+- **Configurable Pricing**: Support for different GCP regions and custom pricing contracts
+- **Performance Optimized**: Handles long-term simulations (60+ months) efficiently
+- **Professional UI**: Clean interface with smart number formatting and progress indicators
+- **No Retrieval Costs**: Unlike manual lifecycle policies, Autoclass doesn't charge for retrievals
+- **Object Count Tracking**: Accurate autoclass management fee calculation
 
-- ✅ **Accurate Day-based Transitions** (30, 90, 365 days)
-- ✅ **Object Size Eligibility** (<128 KiB stays in Standard)
-- ✅ **Generation Tracking** for proper data aging
-- ✅ **Re-promotion Logic** with new generation creation
-- ✅ **Early Deletion Penalties** for premature access
-- ✅ **Extended TCO Analysis** (12-60 months)
-- ✅ **Regional Autoclass Pricing** (accurate GCP rates)
-- ✅ **Cost Validation Alerts** for optimization insights
-- ✅ **CSV Export** with detailed monthly breakdown
-- ✅ **Autoclass vs Manual Lifecycle** comparison guide
-
-## 📋 Installation
+## 🚀 Quick Start
 
 ```bash
 git clone https://github.com/yourusername/gcs-autoclass-simulator.git
@@ -34,20 +22,90 @@ pip install -r requirements.txt
 streamlit run streamlit_app/app.py
 ```
 
-## 🧮 Comprehensive Inputs
+## 📊 Simulation Inputs
 
-### Analysis Configuration
-- **TCO Period**: 12-60 months for long-term cost planning
-- **Monthly Write Volume**: GB of new data ingested monthly
+### Data Configuration
+- **Initial Data Size**: Starting data volume in GB
+- **Data Growth Pattern**: Monthly growth rate (percentage or fixed amount)
+- **Simulation Period**: 12-60 months for comprehensive TCO analysis
 
-### Object Characteristics
-- **Average Object Size**: In KiB (affects eligibility for Autoclass)
-- **Large Object Percentage**: % of data >128 KiB (Autoclass eligible)
+### Object Characteristics  
+- **Average Object Size**: In KiB (affects Autoclass eligibility - must be >128 KiB)
+- **Large Object Percentage**: Percentage of data eligible for Autoclass transitions
 
 ### Access Patterns
-- **Nearline Access Rate**: % of Nearline data accessed monthly
-- **Coldline Access Rate**: % of Coldline data accessed monthly  
-- **Archive Access Rate**: % of Archive data accessed monthly
+- **Nearline Access Rate**: Monthly access percentage for Nearline data
+- **Coldline Access Rate**: Monthly access percentage for Coldline data  
+- **Archive Access Rate**: Monthly access percentage for Archive data
+
+### API Operations
+- **Class A Operations**: Write/delete operations per month
+- **Class B Operations**: Read/list operations per month
+
+## 💰 Comprehensive Cost Analysis
+
+### Storage Costs
+- **Multi-tier Pricing**: Accurate costs for Standard, Nearline, Coldline, and Archive storage
+- **Regional Pricing**: Default Iowa (us-central1) with configurable custom pricing
+- **Autoclass Management Fee**: $0.0025 per object per month (for eligible objects >128 KiB)
+
+### Operational Costs
+- **API Operation Pricing**: Separate Class A and Class B operation costs
+- **Early Deletion Fees**: Charged when data is accessed before minimum storage duration
+- **No Retrieval Costs**: Key advantage of Autoclass over manual lifecycle policies
+
+## 📈 Advanced Features
+
+### Performance Optimizations
+- **Generation Batching**: Efficient handling of data generations for long simulations
+- **Smart Filtering**: Automatic filtering of tiny data amounts (<1MB) to improve performance
+- **Progress Indicators**: Visual feedback for simulations longer than 24 months
+
+### Data Visualization
+- **Monthly Cost Breakdown**: Detailed charts showing cost trends over time
+- **Storage Distribution**: Visual representation of data across storage classes
+- **Key Metrics Dashboard**: Total costs, data distribution, and optimization insights
+
+### Professional Formatting
+- **Smart Number Display**: Scientific notation for very small values, appropriate precision for costs
+- **Configurable Pricing**: Easy-to-use interface for custom pricing scenarios
+- **Export Capabilities**: Detailed CSV export with monthly breakdowns
+
+## 🎯 Use Cases
+
+- **TCO Planning**: Long-term cost forecasting for GCS Autoclass adoption
+- **Storage Strategy Analysis**: Compare costs across different data growth scenarios  
+- **Budget Planning**: Detailed monthly cost projections for financial planning
+- **Pricing Negotiations**: Model costs under different GCP contract terms
+- **Educational Tool**: Understand GCS Autoclass behavior and cost implications
+
+## 🔧 Technical Accuracy
+
+This simulator implements Google Cloud Storage Autoclass behavior accurately:
+
+- ✅ **Correct Transition Timing**: 30 days to Nearline, 90 days to Coldline, 365 days to Archive
+- ✅ **Object Size Eligibility**: Only objects >128 KiB are eligible for Autoclass transitions
+- ✅ **No Retrieval Costs**: Unlike manual lifecycle policies, no charges for data access
+- ✅ **Management Fee Calculation**: $0.0025 per eligible object per month
+- ✅ **Early Deletion Logic**: Proper minimum storage duration enforcement
+- ✅ **Regional Pricing**: Accurate GCP pricing for supported regions
+
+## 📋 Requirements
+
+- Python 3.8+
+- Streamlit
+- Pandas  
+- Plotly
+
+See `requirements.txt` for complete dependency list.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
+
+## 📜 License
+
+MIT License - see LICENSE file for details.
 
 ### API Operations
 - **Class A Operations**: Write operations per month

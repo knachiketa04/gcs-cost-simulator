@@ -23,8 +23,9 @@ st.title("GCS Autoclass Simulator with Object Tracking and Management Fees")
 st.sidebar.header("Analysis Period")
 months = st.sidebar.slider("Total Analysis Period (Months)", 12, 60, 12)
 
-st.sidebar.header("Write Pattern")
-monthly_write = st.sidebar.number_input("Monthly New Data Written (GB)", min_value=1, value=200)
+st.sidebar.header("Data Growth Pattern")
+initial_data_gb = st.sidebar.number_input("Initial Data Upload (GB)", min_value=0, value=700000, help="Amount of data uploaded in Month 1")
+monthly_growth_rate = st.sidebar.number_input("Monthly Growth Rate (%)", min_value=0.0, max_value=50.0, value=0.0, step=0.1, help="Percentage increase in data each month (0% = no new data)")
 
 st.sidebar.header("Object Characteristics")
 percent_large_objects = st.sidebar.slider("% of Data >128 KiB (Autoclass Eligible)", 0, 100, 80) / 100
@@ -49,7 +50,7 @@ reads = st.sidebar.number_input("Class B (Reads)", min_value=0, value=10000)
 writes = st.sidebar.number_input("Class A (Writes)", min_value=0, value=1000)
 
 # --- Helper Function ---
-def simulate_autoclass_with_objects(monthly_write, avg_object_size_large_kib, avg_object_size_small_kib, percent_large_objects, months,
+def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_object_size_large_kib, avg_object_size_small_kib, percent_large_objects, months,
                                     nearline_read_rate, coldline_read_rate, archive_read_rate,
                                     reads, writes):
     generations = []
@@ -58,9 +59,22 @@ def simulate_autoclass_with_objects(monthly_write, avg_object_size_large_kib, av
     cumulative_non_eligible_data = 0     # Track cumulative non-eligible data
 
     for month in range(1, months + 1):
-        # Calculate new objects and data for this month
-        eligible_data = monthly_write * percent_large_objects
-        non_eligible_data = monthly_write * (1 - percent_large_objects)
+        # Calculate new objects and data for this month based on growth pattern
+        if month == 1:
+            # Initial data upload in month 1
+            monthly_data = initial_data_gb
+        else:
+            # Growth model: data grows by percentage each month
+            if monthly_growth_rate > 0:
+                # Calculate incremental growth based on previous month's total
+                previous_total_data = sum(gen["size"] for gen in generations) + cumulative_non_eligible_data
+                monthly_data = previous_total_data * monthly_growth_rate
+            else:
+                # No new data if growth rate is 0%
+                monthly_data = 0
+        
+        eligible_data = monthly_data * percent_large_objects
+        non_eligible_data = monthly_data * (1 - percent_large_objects)
         
         # Calculate object counts separately for each category
         eligible_objects = (eligible_data * 1024 * 1024) / avg_object_size_large_kib  # Convert GB to KiB, then divide by object size
@@ -174,7 +188,8 @@ def simulate_autoclass_with_objects(monthly_write, avg_object_size_large_kib, av
 
 # --- Run Simulation ---
 df = simulate_autoclass_with_objects(
-    monthly_write=monthly_write,
+    initial_data_gb=initial_data_gb,
+    monthly_growth_rate=monthly_growth_rate,
     avg_object_size_large_kib=avg_object_size_large_kib,
     avg_object_size_small_kib=avg_object_size_small_kib,
     percent_large_objects=percent_large_objects,

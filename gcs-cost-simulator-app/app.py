@@ -58,8 +58,8 @@ def setup_pricing_configuration():
     return pricing
 
 
-def setup_access_pattern_config():
-    """Setup access pattern configuration with conditional logic"""
+def setup_access_pattern_config(terminal_storage_class):
+    """Setup access pattern configuration with conditional logic based on terminal storage class"""
     st.sidebar.header("Monthly Access Rates")
     st.sidebar.markdown("*Access rates determine data lifecycle behavior*")
     
@@ -80,18 +80,23 @@ def setup_access_pattern_config():
     else:
         nearline_read_rate = st.sidebar.slider("Nearline (% accessed/month)", 0, 100, 20, help="Percentage accessed monthly (moves back to Standard)") / 100
         
-        if nearline_read_rate == 1.0:
-            st.sidebar.warning("🔒 **All Nearline data re-promoted** - no deeper cold storage")
-        else:
-            coldline_read_rate = st.sidebar.slider("Coldline (% accessed/month)", 0, 100, 30, help="Percentage accessed monthly (moves back to Standard)") / 100
-            
-            if coldline_read_rate == 1.0:
-                st.sidebar.warning("🔒 **All Coldline data re-promoted** - no Archive storage")
+        # Only show coldline/archive controls if terminal storage class allows it
+        if terminal_storage_class == "archive":
+            if nearline_read_rate == 1.0:
+                st.sidebar.warning("🔒 **All Nearline data re-promoted** - no deeper cold storage")
             else:
-                archive_read_rate = st.sidebar.slider("Archive (% accessed/month)", 0, 100, 10, help="Percentage accessed monthly (moves back to Standard)") / 100
+                coldline_read_rate = st.sidebar.slider("Coldline (% accessed/month)", 0, 100, 30, help="Percentage accessed monthly (moves back to Standard)") / 100
+                
+                if coldline_read_rate == 1.0:
+                    st.sidebar.warning("🔒 **All Coldline data re-promoted** - no Archive storage")
+                else:
+                    archive_read_rate = st.sidebar.slider("Archive (% accessed/month)", 0, 100, 10, help="Percentage accessed monthly (moves back to Standard)") / 100
 
-    # Visual feedback about tier blocking
-    if standard_access_rate == 1.0:
+    # Visual feedback about tier blocking and terminal configuration
+    if terminal_storage_class == "nearline":
+        st.sidebar.info("💡 **Terminal Config**: Nearline Terminal - Data stops at Nearline tier")
+        st.sidebar.caption("⚠️ Coldline and Archive tiers disabled by terminal configuration")
+    elif standard_access_rate == 1.0:
         st.sidebar.success("💡 **Data Flow**: All data stays in Standard tier (highest cost, immediate access)")
         st.sidebar.caption("⚠️ Nearline, Coldline, and Archive tiers effectively disabled")
     elif nearline_read_rate == 1.0:
@@ -548,7 +553,7 @@ def main():
     sidebar_config = render_sidebar_config(UI_CONFIG["sidebar"])
     
     # Setup access patterns
-    access_rates = setup_access_pattern_config()
+    access_rates = setup_access_pattern_config(terminal_storage_class)
     
     # Setup lifecycle configuration
     lifecycle_rules = setup_lifecycle_configuration(analysis_mode)

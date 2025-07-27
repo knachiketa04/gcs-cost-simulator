@@ -35,11 +35,13 @@ A comprehensive interactive Streamlit application that compares Google Cloud Sto
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/yourusername/gcs-autoclass-simulator.git
-cd gcs-autoclass-simulator
+git clone https://github.com/knachiketa04/gcs-cost-simulator.git
+cd gcs-cost-simulator
 pip install -r requirements.txt
 streamlit run streamlit_app/app.py
 ```
+
+> **📍 Main Application**: The complete simulator is implemented in `streamlit_app/app.py` (1500+ lines of sophisticated logic)
 
 ## 📊 Simulation Configuration
 
@@ -76,6 +78,19 @@ Choose your comparison strategy:
 - ReportLab (PDF generation)
 
 See `requirements.txt` for complete dependency list.
+
+## 📁 Repository Structure
+
+```
+gcs-cost-simulator/
+├── README.md              # This documentation
+├── requirements.txt       # Python dependencies
+├── LICENSE               # MIT License
+└── streamlit_app/
+    └── app.py           # 🎯 Main application (1500+ lines)
+```
+
+> **Note**: All functionality is contained in the single `streamlit_app/app.py` file for simplicity and maintainability.
 
 
 ## 📜 License

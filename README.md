@@ -1,4 +1,3 @@
-
 # 🚀 GCS Storage Strategy Simulator
 
 ## ⚠️ **Educational Disclaimer**
@@ -6,6 +5,7 @@
 **This tool is designed for educational purposes and cost estimation guidance only.** While it models GCS pricing and behavior based on publicly available Google Cloud documentation, it should not be used as the sole basis for commercial decisions or production deployments.
 
 **For commercial use and production environments:**
+
 - Always conduct thorough testing with your actual data and access patterns
 - Consult the official [Google Cloud Storage documentation](https://cloud.google.com/storage/docs)
 - Validate pricing with the [Google Cloud Pricing Calculator](https://cloud.google.com/products/calculator)
@@ -16,21 +16,29 @@
 
 ---
 
-A comprehensive interactive Streamlit application that compares Google Cloud Storage (GCS) Autoclass vs Lifecycle Policies with accurate cost modeling, intelligent unit scaling, and side-by-side analysis.
+A modular, production-ready Streamlit application that compares Google Cloud Storage (GCS) Autoclass vs Lifecycle Policies with accurate cost modeling, intelligent unit scaling, and comprehensive side-by-side analysis.
 
 ## ✨ Key Features
 
 ### 🔄 **Three Analysis Modes**
+
 - **🤖 Autoclass Only**: Simulate intelligent, access-based storage optimization
 - **📋 Lifecycle Only**: Model time-based storage transitions with custom rules
 - **⚖️ Side-by-Side Comparison**: Direct cost and performance comparison
 
 ### 💰 **Comprehensive Cost Modeling**
+
 - **Accurate GCS Pricing**: Regional pricing with custom configurations
 - **Lifecycle-Specific Costs**: Retrieval costs and early deletion fees
-- **No Hidden Costs**: Transparent Autoclass management fees vs lifecycle retrieval costs
+- **Transparent Fees**: Autoclass management fees vs lifecycle retrieval costs
 - **TCO Analysis**: Total cost of ownership over extended periods
 
+### 📊 **Smart Reporting & Export**
+
+- **Interactive Tables**: Auto-scaling units (GB→TiB, $→$M)
+- **PDF Reports**: Executive summaries with strategic insights
+- **CSV Export**: Raw data for further analysis
+- **Cost Breakdowns**: Storage, API, management, and retrieval costs
 
 ## 🚀 Quick Start
 
@@ -38,60 +46,51 @@ A comprehensive interactive Streamlit application that compares Google Cloud Sto
 git clone https://github.com/knachiketa04/gcs-cost-simulator.git
 cd gcs-cost-simulator
 pip install -r requirements.txt
-streamlit run streamlit_app/app.py
+streamlit run gcs-cost-simulator-app/app.py
 ```
 
-> **📍 Main Application**: The complete simulator is implemented in `streamlit_app/app.py` (1500+ lines of sophisticated logic)
+## 🏗️ Architecture
 
-## 📊 Simulation Configuration
-
-### 🎯 **Analysis Mode Selection**
-Choose your comparison strategy:
-- **Autoclass Only**: Focus on intelligent access-based optimization
-- **Lifecycle Only**: Analyze time-based policy performance  
-- **Side-by-Side**: Compare both strategies with cost difference analysis
-
-### 📁 **Data Configuration**
-- **Initial Data Size**: Starting data volume (auto-scales GB→TiB)
-- **Growth Pattern**: Monthly percentage growth or fixed amounts
-- **Simulation Period**: 12-60 months for comprehensive TCO analysis
-- **Object Characteristics**: Size distribution affecting Autoclass eligibility
-
-### 📊 **Detailed Reporting**
-- **Interactive Tables**: Formatted data with smart units
-- **Cost Breakdown**: Storage, API, management fees, retrieval costs
-- **Key Insights**: Automated analysis and optimization recommendations
-- **Export Options**: CSV data and comprehensive PDF reports
-
-### 📋 **PDF Report Generation**
-- **Executive Summary**: High-level cost and strategy analysis
-- **Detailed Breakdowns**: Monthly data and cost progression
-- **Comparison Analysis**: Side-by-side strategy evaluation (comparison mode)
-- **Strategic Insights**: Data-driven recommendations and decision factors
-
-## 🔧 Technical Requirements
-
-- Python 3.8+
-- Streamlit 1.30.0+
-- Pandas (data processing)
-- Matplotlib (visualization)
-- ReportLab (PDF generation)
-
-See `requirements.txt` for complete dependency list.
-
-## 📁 Repository Structure
+Built with a clean, modular design for maintainability and extensibility:
 
 ```
 gcs-cost-simulator/
-├── README.md              # This documentation
-├── requirements.txt       # Python dependencies
-├── LICENSE               # MIT License
-└── streamlit_app/
-    └── app.py           # 🎯 Main application (1500+ lines)
+├── README.md                    # This documentation
+├── requirements.txt             # Python dependencies
+├── LICENSE                     # MIT License
+└── gcs-cost-simulator-app/     # Main application
+    ├── app.py                  # 🎯 Streamlit UI & orchestration
+    ├── simulation.py           # 🧮 Core business logic & calculations
+    ├── reports.py              # � PDF generation & export
+    ├── utils.py                # 🛠️ Formatting & utility functions
+    ├── config.py               # ⚙️ Configuration & pricing schemas
+    └── requirements.txt        # App-specific dependencies
 ```
 
-> **Note**: All functionality is contained in the single `streamlit_app/app.py` file for simplicity and maintainability.
+## 🔧 Technical Requirements
 
+- **Python**: 3.8+
+- **Core**: Streamlit 1.30.0+, Pandas, Matplotlib
+- **Reports**: ReportLab for PDF generation
+- **Analysis**: NumPy for calculations
+
+See `requirements.txt` for complete dependency specifications.
+
+## 🎯 What This Tool Does
+
+**Compare GCS storage strategies** with real-world scenarios:
+
+- **Data Growth**: Model TB-scale datasets with monthly growth
+- **Access Patterns**: Configure realistic read/write frequencies
+- **Cost Analysis**: See exactly where your money goes
+- **Strategic Insights**: Get actionable recommendations for your use case
+
+### 🎨 **Interactive Configuration**
+
+- **Flexible Pricing**: Custom regional rates and service costs
+- **Lifecycle Rules**: Configure age-based transitions (30/90/365 days)
+- **Access Rates**: Model different data access frequencies
+- **Simulation Length**: 12-60 months for long-term planning
 
 ## 📜 License
 
@@ -99,10 +98,11 @@ MIT License - use freely with attribution.
 
 ---
 
-### 🎉 **Latest Release v1.0**
+### 🎉 **Version 2.0 - Modular Architecture**
+
+- 🏗️ **Clean Architecture**: Separated concerns across 5 focused modules
+- 🔧 **Maintainable Code**: Easy to extend and modify
+- � **Enhanced Analysis**: Improved simulation engine
+- 🎯 **Production Ready**: Professional code structure and documentation
 - ⚖️ **Side-by-Side Comparison**: Complete Autoclass vs Lifecycle analysis
-- 📋 **Custom Lifecycle Rules**: Configurable transition timing
-- 🎯 **Smart Unit Scaling**: Automatic GB→TiB and $→$M conversion
-- 📊 **Enhanced Reporting**: Comprehensive PDF reports with strategic insights
-- 🔄 **Three Analysis Modes**: Flexible comparison strategies
-- 💰 **Accurate Cost Modeling**: Retrieval costs and early deletion fees
+- 💰 **Accurate Cost Modeling**: Retrieval costs and management fees

@@ -79,6 +79,24 @@ analysis_mode = st.radio(
     horizontal=True
 )
 
+# --- Autoclass Configuration ---
+if analysis_mode in ["🤖 Autoclass Only", "⚖️ Side-by-Side Comparison"]:
+    st.subheader("🎛️ Autoclass Configuration")
+    col1, col2 = st.columns(2)
+    with col1:
+        terminal_storage_class = st.selectbox(
+            "Terminal Storage Class",
+            ["nearline", "archive"],
+            index=0,  # Default to Nearline (matches GCS default)
+            help="**Nearline**: Objects stop at Nearline storage (GCS default). **Archive**: Full progression through all storage tiers."
+        )
+    with col2:
+        st.info(f"**Selected**: {terminal_storage_class.title()} Terminal\n\n"
+                f"{'Objects will transition: Standard → Nearline (stop)' if terminal_storage_class == 'nearline' else 'Objects will transition: Standard → Nearline → Coldline → Archive'}")
+else:
+    # Default for lifecycle-only mode
+    terminal_storage_class = "archive"
+
 # --- Pricing Configuration Section ---
 st.sidebar.header("💰 Pricing Configuration")
 st.sidebar.markdown("*Default: Iowa (us-central1) Regional Autoclass*")
@@ -247,7 +265,7 @@ else:
 # --- Helper Function ---
 def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_object_size_large_kib, avg_object_size_small_kib, percent_large_objects, months,
                                     standard_access_rate, nearline_read_rate, coldline_read_rate, archive_read_rate,
-                                    reads, writes):
+                                    reads, writes, terminal_storage_class="nearline"):
     generations = []
     results = []
     cumulative_non_eligible_objects = 0  # Track cumulative non-eligible objects
@@ -307,15 +325,34 @@ def simulate_autoclass_with_objects(initial_data_gb, monthly_growth_rate, avg_ob
             original_objects = gen["objects"]
             remaining_objects = gen["objects"]
             
-            # Determine current storage class based on age in days and access patterns
-            if gen["age_days"] >= 365:
-                storage_class = "archive"
+            # Determine current storage class based on age and terminal configuration
+            def get_storage_class_by_age(age_days, terminal_class):
+                """Determine storage class based on age and terminal configuration"""
+                if terminal_class == "nearline":
+                    # Nearline terminal: Standard -> Nearline (stop)
+                    if age_days >= 30:
+                        return "nearline"
+                    else:
+                        return "standard"
+                else:
+                    # Archive terminal: Standard -> Nearline -> Coldline -> Archive
+                    if age_days >= 365:
+                        return "archive"
+                    elif age_days >= 90:
+                        return "coldline"
+                    elif age_days >= 30:
+                        return "nearline"
+                    else:
+                        return "standard"
+            
+            storage_class = get_storage_class_by_age(gen["age_days"], terminal_storage_class)
+            
+            # Set access rate based on storage class
+            if storage_class == "archive":
                 access_rate = archive_read_rate
-            elif gen["age_days"] >= 90:
-                storage_class = "coldline"
+            elif storage_class == "coldline":
                 access_rate = coldline_read_rate
-            elif gen["age_days"] >= 30:
-                storage_class = "nearline"
+            elif storage_class == "nearline":
                 access_rate = nearline_read_rate
             else:
                 storage_class = "standard"
@@ -636,7 +673,8 @@ with st.spinner("Running simulation...") if months > 24 else st.empty():
             coldline_read_rate=coldline_read_rate,
             archive_read_rate=archive_read_rate,
             reads=reads,
-            writes=writes
+            writes=writes,
+            terminal_storage_class=terminal_storage_class
         )
     
     if analysis_mode in ["📋 Lifecycle Only", "⚖️ Side-by-Side Comparison"]:

@@ -15,7 +15,7 @@
 
 ---
 
-A production-ready Streamlit application that compares Google Cloud Storage (GCS) Autoclass vs Lifecycle Policies with comprehensive cost modeling, intelligent unit scaling, and realistic API operation charges.
+Streamlit application that compares Google Cloud Storage (GCS) Autoclass vs Lifecycle Policies with comprehensive cost modeling, intelligent unit scaling, and realistic API operation charges.
 
 ## ✨ Key Features
 

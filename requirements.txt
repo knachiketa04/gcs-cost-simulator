@@ -1,4 +1,10 @@
 streamlit>=1.30.0
-pandas
-matplotlib
-reportlab
+pandas>=1.5.0
+matplotlib>=3.6.0
+reportlab>=3.6.0
+
+# Development and testing dependencies
+pytest>=7.0.0
+
+# Optional: For enhanced validation and edge case testing
+numpy>=1.21.0

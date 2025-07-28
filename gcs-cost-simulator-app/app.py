@@ -10,6 +10,7 @@ from utils import (format_storage_value, format_cost_value, get_storage_unit_and
                   render_sidebar_config, create_display_dataframe, display_pricing_summary)
 from simulation import simulate_storage_strategy
 from reports import generate_pdf_report, generate_csv_export
+from validation import run_comprehensive_tco_validation
 
 
 def setup_ui_configuration():
@@ -35,7 +36,7 @@ def setup_ui_configuration():
             terminal_storage_class = st.selectbox(
                 "Terminal Storage Class",
                 ["nearline", "archive"],
-                index=0,  # Default to Nearline (matches GCS default)
+                index=1,  # Default to Nearline (matches GCS default)
                 help="**Nearline**: Objects stop at Nearline storage (GCS default). **Archive**: Full progression through all storage tiers."
             )
         with col2:
@@ -65,14 +66,14 @@ def setup_access_pattern_config(terminal_storage_class):
     
     # Standard access rate - always shown
     standard_access_rate = st.sidebar.slider(
-        "Standard (% staying hot/month)", 0, 100, 30, 
+        "Standard (% staying hot/month)", 0, 100, 40, 
         help="Percentage of Standard data that remains hot each month (rest becomes cold and transitions to Nearline after 30 days)"
     ) / 100
 
     # Initialize access rates with defaults
     nearline_read_rate = 0.20
-    coldline_read_rate = 0.30  
-    archive_read_rate = 0.10
+    coldline_read_rate = 0.15  
+    archive_read_rate = 0.15
 
     # Conditional UI logic: Hide controls when data won't reach those tiers
     if standard_access_rate == 1.0:
@@ -85,12 +86,12 @@ def setup_access_pattern_config(terminal_storage_class):
             if nearline_read_rate == 1.0:
                 st.sidebar.warning("🔒 **All Nearline data re-promoted** - no deeper cold storage")
             else:
-                coldline_read_rate = st.sidebar.slider("Coldline (% accessed/month)", 0, 100, 30, help="Percentage accessed monthly (moves back to Standard)") / 100
+                coldline_read_rate = st.sidebar.slider("Coldline (% accessed/month)", 0, 100, 15, help="Percentage accessed monthly (moves back to Standard)") / 100
                 
                 if coldline_read_rate == 1.0:
                     st.sidebar.warning("🔒 **All Coldline data re-promoted** - no Archive storage")
                 else:
-                    archive_read_rate = st.sidebar.slider("Archive (% accessed/month)", 0, 100, 10, help="Percentage accessed monthly (moves back to Standard)") / 100
+                    archive_read_rate = st.sidebar.slider("Archive (% accessed/month)", 0, 100, 15, help="Percentage accessed monthly (moves back to Standard)") / 100
 
     # Visual feedback about tier blocking and terminal configuration
     if terminal_storage_class == "nearline":
@@ -278,11 +279,6 @@ def display_cost_analysis(autoclass_df, lifecycle_df):
     
     st.write(f"• Lifecycle retrieval costs: {retrieval_impact:.1f}% of total cost")
     st.write(f"• Autoclass management fee: {management_impact:.1f}% of total cost")
-    
-    if retrieval_impact > management_impact:
-        st.warning("High retrieval costs in lifecycle policy - consider Autoclass for frequent access patterns")
-    elif management_impact > 10:
-        st.warning("High Autoclass management fees - consider lifecycle policy for predictable access patterns")
 
 
 def display_single_strategy_results(analysis_mode, df):
@@ -558,15 +554,21 @@ def main():
     # Setup lifecycle configuration
     lifecycle_rules = setup_lifecycle_configuration(analysis_mode)
     
-    # Handle object size configuration (conditional UI)
+    # Handle object size configuration (conditional UI) with strict 128 KiB enforcement
     avg_object_size_large_kib = 512  # Default value
     avg_object_size_small_kib = 64   # Default value
 
+    # Add validation warning for Autoclass eligibility
+    if analysis_mode in ["🤖 Autoclass Only", "⚖️ Side-by-Side Comparison"]:
+        st.sidebar.warning("⚠️ **Autoclass Requirement**: Only objects ≥128 KiB are eligible for automatic transitions")
+
     if sidebar_config["percent_large_objects"] > 0:  # Show large object size input if there's any eligible data
-        avg_object_size_large_kib = st.sidebar.number_input("Average Object Size for Data >128 KiB (KiB)", min_value=129, value=512)
+        avg_object_size_large_kib = st.sidebar.number_input("Average Object Size for Data ≥128 KiB (KiB)", min_value=128, value=512, 
+                                                          help="Autoclass-eligible objects must be at least 128 KiB")
 
     if sidebar_config["percent_large_objects"] < 1:  # Show small object size input if there's any non-eligible data
-        avg_object_size_small_kib = st.sidebar.number_input("Average Object Size for Data ≤128 KiB (KiB)", min_value=1, max_value=128, value=64)
+        avg_object_size_small_kib = st.sidebar.number_input("Average Object Size for Data <128 KiB (KiB)", min_value=1, max_value=127, value=64,
+                                                           help="Objects <128 KiB remain in Standard storage permanently in Autoclass")
     
     # Build complete configuration
     config = {
@@ -581,6 +583,21 @@ def main():
     if config["months"] > 36:
         st.info(f"⏳ Running {config['months']}-month simulation... This may take a moment for longer periods.")
 
+    # Run comprehensive TCO validation
+    st.subheader("🔍 TCO Configuration Validation")
+    warnings, errors = run_comprehensive_tco_validation(analysis_mode, config, terminal_storage_class, lifecycle_rules)
+    
+    # Display validation results
+    if errors:
+        for error in errors:
+            st.error(error)
+        st.stop()  # Stop execution if there are critical errors
+    
+    if warnings:
+        with st.expander("⚠️ Configuration Warnings", expanded=len(warnings) > 2):
+            for warning in warnings:
+                st.warning(warning)
+    
     # Run simulations
     with st.spinner("Running simulation...") if config["months"] > 24 else st.empty():
         autoclass_df, lifecycle_df = run_simulations(analysis_mode, config, terminal_storage_class, lifecycle_rules)
@@ -640,12 +657,12 @@ def main():
             # Strategy-specific insights
             if analysis_mode == "🤖 Autoclass Only":
                 if special_percentage > 15:
-                    st.warning("⚠️ High Autoclass management fees - consider lifecycle policy for cost-sensitive scenarios")
+                    st.info("ℹ️ Autoclass management fees represent a significant portion of total costs")
                 elif special_percentage < 5:
                     st.success("✅ Autoclass management fees are minimal - excellent choice for dynamic access patterns")
             else:  # Lifecycle Only
                 if special_percentage > 20:
-                    st.warning("⚠️ High retrieval costs - consider Autoclass for frequent access patterns")
+                    st.info("ℹ️ Retrieval costs represent a significant portion of total costs")
                 elif special_percentage < 5:
                     st.success("✅ Low retrieval costs - lifecycle policy optimal for predictable access patterns")
     

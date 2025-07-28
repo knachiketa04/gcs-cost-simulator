@@ -291,7 +291,6 @@ def generate_insights_content(analysis_mode, autoclass_df=None, lifecycle_df=Non
         <br/>
         <b>Decision Factors:</b><br/>
         • {"Lifecycle saves money due to no management fees and predictable transitions" if cost_difference > 0 else "Autoclass saves money through intelligent optimization and no retrieval costs"}<br/>
-        • {"Consider lifecycle for predictable, time-based access patterns" if cost_difference > 0 else "Consider Autoclass for dynamic, unpredictable access patterns"}<br/>
         • {"Lifecycle requires manual rule configuration but offers more control" if cost_difference > 0 else "Autoclass provides automatic optimization with minimal configuration"}
         """
     else:
@@ -306,7 +305,6 @@ def generate_insights_content(analysis_mode, autoclass_df=None, lifecycle_df=Non
             <b>{strategy_name} Analysis Results:</b><br/>
             • Storage costs represent {storage_percentage:.1f}% of total expenses<br/>
             • Autoclass management fee: {mgmt_percentage:.1f}% of total cost<br/>
-            • {"Management fees are reasonable for the automation benefits" if mgmt_percentage < 15 else "Consider lifecycle policy to reduce management costs"}<br/>
             <br/>
             <b>Autoclass Benefits:</b><br/>
             • Automatic tier transitions based on access patterns<br/>
@@ -320,7 +318,6 @@ def generate_insights_content(analysis_mode, autoclass_df=None, lifecycle_df=Non
             <b>{strategy_name} Analysis Results:</b><br/>
             • Storage costs represent {storage_percentage:.1f}% of total expenses<br/>
             • Retrieval costs: {retrieval_percentage:.1f}% of total cost<br/>
-            • {"Retrieval costs are manageable for this access pattern" if retrieval_percentage < 20 else "High retrieval costs - consider Autoclass for frequent access"}<br/>
             <br/>
             <b>Lifecycle Policy Benefits:</b><br/>
             • No management fees (cost-effective for large datasets)<br/>

@@ -85,8 +85,8 @@ def render_config_section(section_config, current_pricing):
 
 
 def build_pricing_config(config_values):
-    """Build pricing configuration from UI values"""
-    return {
+    """Build pricing configuration from UI values with Autoclass-specific adjustments"""
+    base_pricing = {
         "standard": {"storage": config_values["standard_storage_price"], "min_storage_days": 0},
         "nearline": {"storage": config_values["nearline_storage_price"], "min_storage_days": 30},
         "coldline": {"storage": config_values["coldline_storage_price"], "min_storage_days": 90},
@@ -94,6 +94,11 @@ def build_pricing_config(config_values):
         "operations": {
             "class_a": config_values["class_a_price"],
             "class_b": config_values["class_b_price"]
+        },
+        "lifecycle_transitions": {
+            "standard_to_nearline": config_values["std_to_nearline_price"],
+            "nearline_to_coldline": config_values["nearline_to_coldline_price"],
+            "coldline_to_archive": config_values["coldline_to_archive_price"]
         },
         "autoclass_fee_per_1000_objects_per_month": config_values["autoclass_fee_price"],
         "retrieval_costs": {
@@ -107,6 +112,20 @@ def build_pricing_config(config_values):
             "archive": config_values["archive_storage_price"]
         }
     }
+    
+    # Add Autoclass-specific pricing adjustments
+    base_pricing["autoclass_adjustments"] = {
+        "no_retrieval_fees": True,  # Autoclass doesn't charge retrieval fees
+        "no_early_deletion_fees": True,  # Autoclass doesn't charge early deletion fees
+        "standard_rate_operations": True,  # All operations charged at Standard rate
+        "transition_operation_charges": {
+            "to_standard_from_nearline": False,  # No Class A charge
+            "to_standard_from_coldline": True,   # Class A charge applies
+            "to_standard_from_archive": True     # Class A charge applies
+        }
+    }
+    
+    return base_pricing
 
 
 def render_sidebar_config(sidebar_config):

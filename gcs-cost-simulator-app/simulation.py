@@ -5,7 +5,14 @@ from utils import format_storage_value, format_cost_value, get_storage_unit_and_
 
 
 def get_storage_class_by_age(age_days, terminal_class):
-    """Determine storage class based on age and terminal configuration"""
+    """
+    Determine storage class based on age and terminal configuration for TCO analysis.
+    
+    Uses standard GCS Autoclass transition thresholds:
+    - Standard -> Nearline: 30 days
+    - Nearline -> Coldline: 90 days  
+    - Coldline -> Archive: 365 days
+    """
     if terminal_class == "nearline":
         # Nearline terminal: Standard -> Nearline (stop)
         if age_days >= 30:
@@ -25,8 +32,22 @@ def get_storage_class_by_age(age_days, terminal_class):
 
 
 def process_generation_lifecycle(gen, storage_classes, access_rates, pricing, month):
-    """Process a single generation for lifecycle strategy"""
+    """Process a single generation for lifecycle strategy with transition operation costs"""
     total_objects = gen["objects"]
+    transition_cost = 0  # Track specific transition costs for lifecycle transitions
+    
+    # Check if transition occurred this month (age-based lifecycle transitions)
+    current_class = get_storage_class_by_age(gen["age_days"], "archive")  # Lifecycle goes to archive
+    previous_class = get_storage_class_by_age(gen["age_days"] - 30, "archive")  # Previous month's class
+    
+    if current_class != previous_class:
+        # Lifecycle transition occurred - apply specific transition cost based on transition type
+        if previous_class == "standard" and current_class == "nearline":
+            transition_cost = gen["objects"] * pricing["lifecycle_transitions"]["standard_to_nearline"]
+        elif previous_class == "nearline" and current_class == "coldline":
+            transition_cost = gen["objects"] * pricing["lifecycle_transitions"]["nearline_to_coldline"]
+        elif previous_class == "coldline" and current_class == "archive":
+            transition_cost = gen["objects"] * pricing["lifecycle_transitions"]["coldline_to_archive"]
     
     # Calculate retrieval costs based on access patterns
     retrieval_costs = {"nearline": 0, "coldline": 0, "archive": 0}
@@ -54,17 +75,18 @@ def process_generation_lifecycle(gen, storage_classes, access_rates, pricing, mo
     # Age the generation for next month
     gen["age_days"] += 30
     
-    return total_objects, retrieval_costs
+    return total_objects, retrieval_costs, transition_cost
 
 
-def process_generation_autoclass(gen, storage_classes, access_rates, terminal_storage_class, month):
-    """Process a single generation for autoclass strategy with re-promotion logic"""
+def process_generation_autoclass(gen, storage_classes, access_rates, terminal_storage_class, month, pricing):
+    """Process a single generation for autoclass strategy with accurate re-promotion logic and operation charges"""
     original_size = gen["size"]
     remaining_size = gen["size"]
     original_objects = gen["objects"]
     remaining_objects = gen["objects"]
     total_eligible_objects = 0
     new_generations = []
+    transition_operations = 0  # Track Class A operations for transitions
     
     storage_class = get_storage_class_by_age(gen["age_days"], terminal_storage_class)
     
@@ -108,13 +130,19 @@ def process_generation_autoclass(gen, storage_classes, access_rates, terminal_st
                 storage_classes["standard"] += cold_volume
                 total_eligible_objects += cold_objects
                 
-        return total_eligible_objects, new_generations
+        return total_eligible_objects, new_generations, transition_operations
     
     # Handle access and re-promotion for colder tiers (data moves freely in Autoclass)
     access_rate = access_rates.get(storage_class, 0)
     if access_rate > 0 and storage_class != "standard":
         accessed_volume = original_size * access_rate
         accessed_objects = original_objects * access_rate
+        
+        # Calculate transition operation charges based on source storage class
+        # From docs: "When Autoclass transitions an object from Coldline storage or Archive storage to
+        # Standard storage or Nearline storage, each transition incurs a Class A operation charge"
+        if storage_class in ["coldline", "archive"] and accessed_volume > 0.001:
+            transition_operations += accessed_objects  # Each object access = 1 Class A operation
         
         # Re-promote accessed data to standard (create new generation)
         if accessed_volume > 0.001:  # Only create if significant size
@@ -142,9 +170,9 @@ def process_generation_autoclass(gen, storage_classes, access_rates, terminal_st
         
         # Age the generation for next month
         gen["age_days"] += 30
-        return total_eligible_objects, [gen] + new_generations
+        return total_eligible_objects, [gen] + new_generations, transition_operations
     
-    return total_eligible_objects, new_generations
+    return total_eligible_objects, new_generations, transition_operations
 
 
 def optimize_generations(generations, max_generations=150):
@@ -243,16 +271,18 @@ def simulate_storage_strategy(params, strategy_config):
             total_eligible_objects = 0
             active_generations = []
             new_generations = []
+            total_transition_operations = 0
             
             for gen in generations:
                 if gen["size"] < 0.001:  # Skip tiny generations
                     continue
                     
-                gen_objects, gen_new_gens = process_generation_autoclass(
+                gen_objects, gen_new_gens, gen_transition_ops = process_generation_autoclass(
                     gen, storage_classes, params["access_rates"], 
-                    strategy_config["terminal_storage_class"], month
+                    strategy_config["terminal_storage_class"], month, params["pricing"]
                 )
                 total_eligible_objects += gen_objects
+                total_transition_operations += gen_transition_ops
                 
                 # Separate active and new generations
                 for new_gen in gen_new_gens:
@@ -264,9 +294,14 @@ def simulate_storage_strategy(params, strategy_config):
             generations = active_generations + new_generations
             total_objects = total_eligible_objects + cumulative_non_eligible_objects
             
-            # Calculate costs
+            # Calculate costs with Autoclass-specific pricing
             storage_cost = sum(storage_classes[c] * params["pricing"][c]["storage"] for c in storage_classes)
-            api_cost = (params["reads"] * params["pricing"]["operations"]["class_b"]) + (params["writes"] * params["pricing"]["operations"]["class_a"])
+            
+            # API costs: Base operations + transition operations (Class A charges for coldline/archive→standard)
+            base_api_cost = (params["reads"] * params["pricing"]["operations"]["class_b"]) + (params["writes"] * params["pricing"]["operations"]["class_a"])
+            transition_api_cost = total_transition_operations * params["pricing"]["operations"]["class_a"]
+            api_cost = base_api_cost + transition_api_cost
+            
             autoclass_fee = (total_eligible_objects / 1000) * params["pricing"]["autoclass_fee_per_1000_objects_per_month"]
             special_cost = autoclass_fee
             special_label = "Autoclass Fee ($)"
@@ -275,24 +310,30 @@ def simulate_storage_strategy(params, strategy_config):
         else:  # lifecycle
             total_objects = cumulative_non_eligible_objects
             total_retrieval_cost = 0
+            total_transition_cost = 0
+            storage_classes = {"standard": 0, "nearline": 0, "coldline": 0, "archive": 0}
             active_generations = []
             
             for gen in generations:
                 if gen["size"] < 0.001:  # Skip tiny generations
                     continue
                     
-                gen_objects, retrieval_costs = process_generation_lifecycle(
+                gen_objects, retrieval_costs, transition_cost = process_generation_lifecycle(
                     gen, storage_classes, params["access_rates"], params["pricing"], month
                 )
                 total_objects += gen_objects
                 total_retrieval_cost += sum(retrieval_costs.values())
+                total_transition_cost += transition_cost
                 active_generations.append(gen)
             
             generations = active_generations
             
             # Calculate costs
             storage_cost = sum(storage_classes[c] * params["pricing"][c]["storage"] for c in storage_classes)
-            api_cost = (params["reads"] * params["pricing"]["operations"]["class_b"]) + (params["writes"] * params["pricing"]["operations"]["class_a"])
+            
+            # API costs: Base operations + lifecycle transition costs (direct $ costs, not per-operation)
+            base_api_cost = (params["reads"] * params["pricing"]["operations"]["class_b"]) + (params["writes"] * params["pricing"]["operations"]["class_a"])
+            api_cost = base_api_cost + total_transition_cost
             special_cost = total_retrieval_cost
             special_label = "Retrieval Cost ($)"
             special_formatted = "Retrieval Cost (Formatted)"

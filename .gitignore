@@ -64,3 +64,9 @@ Thumbs.db
 test_*.py
 debug_*.py
 temp_*.py
+
+# Development reference documents (local only)
+ARCHITECTURE_REFERENCE.md
+
+# Private deployment files (not for public repo)
+private/

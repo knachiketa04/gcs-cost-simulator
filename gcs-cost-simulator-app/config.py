@@ -10,6 +10,12 @@ DEFAULT_PRICING = {
         "class_a": 0.05 / 10000,  # Per operation
         "class_b": 0.004 / 10000  # Per operation
     },
+    # Lifecycle transition costs (Class A operations per 1000 operations)
+    "lifecycle_transitions": {
+        "standard_to_nearline": 0.0200 / 1000,    # $0.0200 per 1000 operations
+        "nearline_to_coldline": 0.0400 / 1000,    # $0.0400 per 1000 operations  
+        "coldline_to_archive": 0.1000 / 1000      # $0.1000 per 1000 operations
+    },
     "autoclass_fee_per_1000_objects_per_month": 0.0025,  # Per 1000 objects per month
     "retrieval_costs": {
         "nearline": 0.01,    # $ per GB retrieved
@@ -50,6 +56,14 @@ UI_CONFIG = {
                     "autoclass_fee_price": {"label": "Per 1000 Objects per Month ($)", "default": "autoclass_fee_per_1000_objects_per_month", "format": "%.4f", "step": 0.0001}
                 }
             },
+            "lifecycle_transitions": {
+                "title": "Lifecycle Transition Costs ($ per 1000 operations)",
+                "fields": {
+                    "std_to_nearline_price": {"label": "Standard → Nearline", "default": "lifecycle_transitions.standard_to_nearline", "format": "%.6f", "step": 0.000001},
+                    "nearline_to_coldline_price": {"label": "Nearline → Coldline", "default": "lifecycle_transitions.nearline_to_coldline", "format": "%.6f", "step": 0.000001},
+                    "coldline_to_archive_price": {"label": "Coldline → Archive", "default": "lifecycle_transitions.coldline_to_archive", "format": "%.6f", "step": 0.000001}
+                }
+            },
             "lifecycle": {
                 "title": "Lifecycle-Specific Costs",
                 "fields": {
@@ -62,18 +76,18 @@ UI_CONFIG = {
     },
     "sidebar": {
         "analysis_period": {
-            "months": {"type": "slider", "label": "Total Analysis Period (Months)", "min": 12, "max": 60, "default": 12}
+            "months": {"type": "slider", "label": "Total Analysis Period (Months)", "min": 12, "max": 60, "default": 36}
         },
         "data_growth": {
-            "initial_data_gb": {"type": "number_input", "label": "Initial Data Upload (GB)", "min": 0, "default": 10240, "step": 1, "help": "Amount of data uploaded in Month 1"},
-            "monthly_growth_rate": {"type": "number_input", "label": "Monthly Growth Rate (%)", "min": 0.0, "max": 50.0, "default": 0.0, "step": 0.1, "help": "Percentage increase in data each month (0% = no new data)", "convert": "percentage"}
+            "initial_data_gb": {"type": "number_input", "label": "Initial Data Upload (GB)", "min": 0, "default": 1048576, "step": 1, "help": "Amount of data uploaded in Month 1"},
+            "monthly_growth_rate": {"type": "number_input", "label": "Monthly Growth Rate (%)", "min": 0.0, "max": 50.0, "default": 10.0, "step": 0.1, "help": "Percentage increase in data each month (0% = no new data)", "convert": "percentage"}
         },
         "object_characteristics": {
-            "percent_large_objects": {"type": "slider", "label": "% of Data >128 KiB (Autoclass Eligible)", "min": 0, "max": 100, "default": 80, "convert": "percentage"}
+            "percent_large_objects": {"type": "slider", "label": "% of Data >128 KiB (Autoclass Eligible)", "min": 0, "max": 100, "default": 90, "convert": "percentage"}
         },
         "api_operations": {
-            "reads": {"type": "number_input", "label": "Class B (Reads)", "min": 0, "default": 10000, "step": 1},
-            "writes": {"type": "number_input", "label": "Class A (Writes)", "min": 0, "default": 1000, "step": 1}
+            "reads": {"type": "number_input", "label": "Class B (Reads)", "min": 0, "default": 10000000, "step": 1},
+            "writes": {"type": "number_input", "label": "Class A (Writes)", "min": 0, "default": 1000000, "step": 1}
         }
     }
 }

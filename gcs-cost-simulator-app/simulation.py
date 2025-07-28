@@ -254,6 +254,12 @@ def simulate_storage_strategy(params, strategy_config):
         cumulative_non_eligible_objects += non_eligible_objects
         cumulative_non_eligible_data += non_eligible_data
 
+        # Calculate upload operations for new data (Class A operations for PUT requests)
+        upload_operations_large = eligible_objects  # Each large object upload = 1 Class A operation
+        upload_operations_small = non_eligible_objects  # Each small object upload = 1 Class A operation
+        total_upload_operations = upload_operations_large + upload_operations_small
+        upload_api_cost = total_upload_operations * params["pricing"]["operations"]["class_a"]
+
         # Add new generation for eligible data
         if eligible_data > 0:
             generations.append({
@@ -297,10 +303,10 @@ def simulate_storage_strategy(params, strategy_config):
             # Calculate costs with Autoclass-specific pricing
             storage_cost = sum(storage_classes[c] * params["pricing"][c]["storage"] for c in storage_classes)
             
-            # API costs: Base operations + transition operations (Class A charges for coldline/archive→standard)
-            base_api_cost = (params["reads"] * params["pricing"]["operations"]["class_b"]) + (params["writes"] * params["pricing"]["operations"]["class_a"])
+            # API costs: User operations + transition operations + upload operations
+            user_api_cost = (params["reads"] * params["pricing"]["operations"]["class_b"]) + (params["writes"] * params["pricing"]["operations"]["class_a"])
             transition_api_cost = total_transition_operations * params["pricing"]["operations"]["class_a"]
-            api_cost = base_api_cost + transition_api_cost
+            api_cost = user_api_cost + transition_api_cost + upload_api_cost
             
             autoclass_fee = (total_eligible_objects / 1000) * params["pricing"]["autoclass_fee_per_1000_objects_per_month"]
             special_cost = autoclass_fee
@@ -331,9 +337,9 @@ def simulate_storage_strategy(params, strategy_config):
             # Calculate costs
             storage_cost = sum(storage_classes[c] * params["pricing"][c]["storage"] for c in storage_classes)
             
-            # API costs: Base operations + lifecycle transition costs (direct $ costs, not per-operation)
-            base_api_cost = (params["reads"] * params["pricing"]["operations"]["class_b"]) + (params["writes"] * params["pricing"]["operations"]["class_a"])
-            api_cost = base_api_cost + total_transition_cost
+            # API costs: User operations + lifecycle transition costs + upload operations
+            user_api_cost = (params["reads"] * params["pricing"]["operations"]["class_b"]) + (params["writes"] * params["pricing"]["operations"]["class_a"])
+            api_cost = user_api_cost + total_transition_cost + upload_api_cost
             special_cost = total_retrieval_cost
             special_label = "Retrieval Cost ($)"
             special_formatted = "Retrieval Cost (Formatted)"
@@ -357,6 +363,9 @@ def simulate_storage_strategy(params, strategy_config):
             special_label: round(special_cost, 2),
             "Storage Cost ($)": round(storage_cost, 2),
             "API Cost ($)": round(api_cost, 2),
+            "Upload API Cost ($)": round(upload_api_cost, 2),
+            "User API Cost ($)": round(user_api_cost, 2),
+            "Transition API Cost ($)": round(transition_api_cost if strategy_type == "autoclass" else total_transition_cost, 2),
             "Total Cost ($)": round(total_cost, 2),
             # Formatted values for display
             "Standard (Formatted)": format_storage_value(storage_classes["standard"]),
@@ -367,6 +376,9 @@ def simulate_storage_strategy(params, strategy_config):
             special_formatted: format_cost_value(special_cost),
             "Storage Cost (Formatted)": format_cost_value(storage_cost),
             "API Cost (Formatted)": format_cost_value(api_cost),
+            "Upload API Cost (Formatted)": format_cost_value(upload_api_cost),
+            "User API Cost (Formatted)": format_cost_value(user_api_cost),
+            "Transition API Cost (Formatted)": format_cost_value(transition_api_cost if strategy_type == "autoclass" else total_transition_cost),
             "Total Cost (Formatted)": format_cost_value(total_cost)
         }
         

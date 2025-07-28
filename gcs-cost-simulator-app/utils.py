@@ -194,24 +194,26 @@ def create_display_dataframe(df, mode):
             "Month", "Standard (Formatted)", "Nearline (Formatted)", "Coldline (Formatted)", 
             "Archive (Formatted)", "Total Data (Formatted)", "Total Eligible Objects", 
             "Total Non-Eligible Objects", "Autoclass Fee (Formatted)", "Storage Cost (Formatted)", 
+            "Upload API Cost (Formatted)", "User API Cost (Formatted)", "Transition API Cost (Formatted)",
             "API Cost (Formatted)", "Total Cost (Formatted)"
         ]
         column_names = [
             "Month", "Standard", "Nearline", "Coldline", "Archive", "Total Data", 
             "Eligible Objects", "Non-Eligible Objects", "Autoclass Fee", "Storage Cost", 
-            "API Cost", "Total Cost"
+            "Upload API", "User API", "Transition API", "Total API", "Total Cost"
         ]
     elif mode == "lifecycle":
         display_columns = [
             "Month", "Standard (Formatted)", "Nearline (Formatted)", "Coldline (Formatted)", 
             "Archive (Formatted)", "Total Data (Formatted)", "Total Objects", 
             "Retrieval Cost (Formatted)", "Storage Cost (Formatted)", 
+            "Upload API Cost (Formatted)", "User API Cost (Formatted)", "Transition API Cost (Formatted)",
             "API Cost (Formatted)", "Total Cost (Formatted)"
         ]
         column_names = [
             "Month", "Standard", "Nearline", "Coldline", "Archive", "Total Data", 
             "Total Objects", "Retrieval Cost", "Storage Cost", 
-            "API Cost", "Total Cost"
+            "Upload API", "User API", "Transition API", "Total API", "Total Cost"
         ]
     else:  # comparison
         # Create comparison data

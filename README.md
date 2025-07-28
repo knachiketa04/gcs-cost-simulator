@@ -15,7 +15,7 @@
 
 ---
 
-A production-ready Streamlit application that compares Google Cloud Storage (GCS) Autoclass vs Lifecycle Policies with accurate cost modeling, intelligent unit scaling, and comprehensive TCO analysis.
+A production-ready Streamlit application that compares Google Cloud Storage (GCS) Autoclass vs Lifecycle Policies with comprehensive cost modeling, intelligent unit scaling, and realistic API operation charges.
 
 ## ✨ Key Features
 
@@ -25,17 +25,19 @@ A production-ready Streamlit application that compares Google Cloud Storage (GCS
 - **📋 Lifecycle Only**: Time-based storage transitions with custom transition rules
 - **⚖️ Side-by-Side Comparison**: Direct cost and performance comparison with strategic insights
 
-### 💰 **Enterprise-Grade Cost Modeling**
+### 💰 **Comprehensive Cost Modeling**
 
 - **Accurate GCS Pricing**: Regional pricing (default: Iowa us-central1) with full customization
+- **Automatic Upload Costs**: Class A operation charges calculated for monthly data uploads
 - **Strategy-Specific Costs**: Autoclass management fees vs lifecycle retrieval costs
-- **Transition Costs**: Proper modeling of lifecycle transition operation charges
+- **Transition Operations**: Proper modeling of lifecycle and autoclass transition charges
 - **Object Size Compliance**: Strict 128 KiB Autoclass eligibility enforcement
 
 ### 📊 **Smart Analytics & Export**
 
+- **Detailed API Breakdown**: Upload, user-defined, and system transition operations tracked separately
 - **Auto-Scaling Units**: Intelligent GB→TiB, $→$M scaling for large datasets
-- **Professional Reports**: PDF executive summaries with cost breakdowns
+- **Professional Reports**: PDF executive summaries with comprehensive cost breakdowns
 - **Raw Data Export**: CSV export for further analysis and integration
 - **TCO Validation**: Comprehensive error checking and configuration warnings
 
@@ -72,6 +74,7 @@ gcs-cost-simulator/
 **Compare GCS storage strategies** with realistic enterprise scenarios:
 
 - **Data Growth Modeling**: TB-scale datasets with configurable monthly growth (0-50%)
+- **Realistic API Costing**: Automatic Class A upload operations plus user-defined operations
 - **Access Pattern Configuration**: Conditional UI adapts based on terminal storage and access rates
 - **Generation-Based Tracking**: Accurate data aging and lifecycle cost calculations
 - **Long-Term Analysis**: 12-60 month simulations with generation optimization for performance
@@ -89,6 +92,7 @@ gcs-cost-simulator/
 - **Access Rates**: Standard 40% hot, Nearline 20%, Coldline 15%, Archive 15%
 - **Object Sizes**: Large objects 512 KiB (Autoclass eligible), Small objects 64 KiB
 - **Terminal Storage**: Archive (full progression enabled)
+- **API Operations**: Automatic upload costs + configurable additional operations
 
 ## 📜 License
 
@@ -96,9 +100,10 @@ MIT License - use freely with attribution.
 
 ---
 
-### 🎉 **Version 2.0 - Production Ready**
+### 🎉 **Version 2.1 - Enhanced Cost Modeling**
 
 ✅ **Streamlined Codebase**: 6 essential modules with clear separation of concerns  
-✅ **Accurate Cost Modeling**: Proper lifecycle transition costs and Autoclass compliance  
+✅ **Realistic API Costing**: Automatic Class A upload operations + user-defined operations  
+✅ **Comprehensive Cost Tracking**: Upload, transition, and user operations tracked separately  
 ✅ **Enhanced UI/UX**: Conditional controls and smart validation with minimal noise  
 ✅ **Professional Export**: Template-driven PDF reports and comprehensive CSV data

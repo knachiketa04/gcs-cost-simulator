@@ -86,8 +86,8 @@ UI_CONFIG = {
             "percent_large_objects": {"type": "slider", "label": "% of Data >128 KiB (Autoclass Eligible)", "min": 0, "max": 100, "default": 90, "convert": "percentage"}
         },
         "api_operations": {
-            "reads": {"type": "number_input", "label": "Class B (Reads)", "min": 0, "default": 10000000, "step": 1},
-            "writes": {"type": "number_input", "label": "Class A (Writes)", "min": 0, "default": 1000000, "step": 1}
+            "reads": {"type": "number_input", "label": "Additional Class B (Reads) - Other Operations", "min": 0, "default": 0, "step": 1, "help": "Additional read operations beyond automatic upload operations (e.g., data access, list operations)"},
+            "writes": {"type": "number_input", "label": "Additional Class A (Writes) - Other Operations", "min": 0, "default": 0, "step": 1, "help": "Additional write operations beyond automatic upload operations (e.g., metadata updates, deletes)"}
         }
     }
 }

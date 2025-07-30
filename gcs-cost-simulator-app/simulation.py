@@ -4,78 +4,137 @@ import pandas as pd
 from utils import format_storage_value, format_cost_value, get_storage_unit_and_value, get_cost_unit_and_value
 
 
-def get_storage_class_by_age(age_days, terminal_class):
+def get_storage_class_by_age(age_days, terminal_class, lifecycle_rules=None):
     """
-    Determine storage class based on age and terminal configuration for TCO analysis.
-    
-    Uses standard GCS Autoclass transition thresholds:
-    - Standard -> Nearline: 30 days
-    - Nearline -> Coldline: 90 days  
-    - Coldline -> Archive: 365 days
+    Enhanced version that handles flexible lifecycle paths with None values
+    for skipped storage classes, while maintaining backward compatibility.
     """
-    if terminal_class == "nearline":
-        # Nearline terminal: Standard -> Nearline (stop)
-        if age_days >= 30:
-            return "nearline"
-        else:
-            return "standard"
-    else:
-        # Archive terminal: Standard -> Nearline -> Coldline -> Archive
-        if age_days >= 365:
+    if lifecycle_rules:
+        # Use flexible lifecycle logic for custom paths
+        nearline_threshold = lifecycle_rules.get("nearline_days")
+        coldline_threshold = lifecycle_rules.get("coldline_days") 
+        archive_threshold = lifecycle_rules.get("archive_days")
+        
+        # Handle direct transitions (skipping intermediate classes)
+        if archive_threshold and age_days >= archive_threshold:
             return "archive"
-        elif age_days >= 90:
+        elif coldline_threshold and age_days >= coldline_threshold:
             return "coldline"
-        elif age_days >= 30:
+        elif nearline_threshold and age_days >= nearline_threshold:
             return "nearline"
         else:
             return "standard"
-
-
-def process_generation_lifecycle(gen, storage_classes, access_rates, pricing, month):
-    """Process a single generation for lifecycle strategy with transition operation costs"""
-    total_objects = gen["objects"]
-    transition_cost = 0  # Track specific transition costs for lifecycle transitions
-    
-    # Check if transition occurred this month (age-based lifecycle transitions)
-    current_class = get_storage_class_by_age(gen["age_days"], "archive")  # Lifecycle goes to archive
-    previous_class = get_storage_class_by_age(gen["age_days"] - 30, "archive")  # Previous month's class
-    
-    if current_class != previous_class:
-        # Lifecycle transition occurred - apply specific transition cost based on transition type
-        if previous_class == "standard" and current_class == "nearline":
-            transition_cost = gen["objects"] * pricing["lifecycle_transitions"]["standard_to_nearline"]
-        elif previous_class == "nearline" and current_class == "coldline":
-            transition_cost = gen["objects"] * pricing["lifecycle_transitions"]["nearline_to_coldline"]
-        elif previous_class == "coldline" and current_class == "archive":
-            transition_cost = gen["objects"] * pricing["lifecycle_transitions"]["coldline_to_archive"]
-    
-    # Calculate retrieval costs based on access patterns
-    retrieval_costs = {"nearline": 0, "coldline": 0, "archive": 0}
-    
-    # Determine storage class based on age
-    age_days = gen["age_days"]
-    if age_days >= 365:
-        storage_class = "archive"
-        if access_rates["archive"] > 0:
-            retrieval_costs["archive"] += gen["size"] * access_rates["archive"] * pricing["retrieval_costs"]["archive"]
-    elif age_days >= 90:
-        storage_class = "coldline"
-        if access_rates["coldline"] > 0:
-            retrieval_costs["coldline"] += gen["size"] * access_rates["coldline"] * pricing["retrieval_costs"]["coldline"]
-    elif age_days >= 30:
-        storage_class = "nearline"
-        if access_rates["nearline"] > 0:
-            retrieval_costs["nearline"] += gen["size"] * access_rates["nearline"] * pricing["retrieval_costs"]["nearline"]
     else:
-        storage_class = "standard"
+        # Original logic for backward compatibility (Autoclass)
+        nearline_threshold = 30
+        coldline_threshold = 90
+        archive_threshold = 365
+        
+        if terminal_class == "nearline":
+            # Nearline terminal: Standard -> Nearline (stop)
+            if age_days >= nearline_threshold:
+                return "nearline"
+            else:
+                return "standard"
+        else:
+            # Archive terminal: Standard -> Nearline -> Coldline -> Archive
+            if age_days >= archive_threshold:
+                return "archive"
+            elif age_days >= coldline_threshold:
+                return "coldline"
+            elif age_days >= nearline_threshold:
+                return "nearline"
+            else:
+                return "standard"
+
+
+def process_month_transitions_corrected(start_age, end_age, lifecycle_rules):
+    """
+    Enhanced version that handles flexible lifecycle paths including:
+    - Direct transitions (Standard → Archive)
+    - Skipped classes (Standard → Coldline, skip Nearline)
+    - Partial paths (Nearline → Archive, skip Coldline)
+    """
+    nearline_threshold = lifecycle_rules.get("nearline_days")
+    coldline_threshold = lifecycle_rules.get("coldline_days")
+    archive_threshold = lifecycle_rules.get("archive_days")
     
-    # Add to storage class
-    storage_classes[storage_class] += gen["size"]
+    # Find all transitions that occur within this month (only non-None thresholds)
+    transitions = []
     
-    # Age the generation for next month
-    gen["age_days"] += 30
+    if nearline_threshold and start_age < nearline_threshold <= end_age:
+        transitions.append((nearline_threshold, "nearline"))
+    if coldline_threshold and start_age < coldline_threshold <= end_age:
+        transitions.append((coldline_threshold, "coldline"))
+    if archive_threshold and start_age < archive_threshold <= end_age:
+        transitions.append((archive_threshold, "archive"))
     
-    return total_objects, retrieval_costs, transition_cost
+    # Sort transitions by day
+    transitions.sort()
+    
+    # Calculate time allocation for each storage class
+    storage_allocation = {}
+    current_age = start_age
+    
+    # Process each transition in sequence
+    for transition_day, target_class in transitions:
+        if current_age < transition_day:
+            # Time spent in current class before transition
+            days_in_current_class = transition_day - current_age
+            current_class = get_storage_class_by_age(current_age, "archive", lifecycle_rules)
+            
+            if current_class in storage_allocation:
+                storage_allocation[current_class] += days_in_current_class
+            else:
+                storage_allocation[current_class] = days_in_current_class
+            
+            current_age = transition_day
+    
+    # Handle remaining time in final class (if any)
+    if current_age < end_age:
+        remaining_days = end_age - current_age
+        final_class = get_storage_class_by_age(current_age, "archive", lifecycle_rules)
+        
+        if final_class in storage_allocation:
+            storage_allocation[final_class] += remaining_days
+        else:
+            storage_allocation[final_class] = remaining_days
+    
+    return storage_allocation, transitions
+
+
+def calculate_transition_costs_corrected(transitions, gen_objects, pricing):
+    """
+    Enhanced version that calculates transition costs for flexible paths,
+    handling direct transitions and skipped classes.
+    """
+    total_transition_cost = 0
+    
+    # Track what storage class we're transitioning from
+    current_class = "standard"  # Always start from standard
+    
+    for transition_day, target_class in transitions:
+        # Determine the actual transition cost based on from → to classes
+        if current_class == "standard" and target_class == "nearline":
+            total_transition_cost += gen_objects * pricing["lifecycle_transitions"]["standard_to_nearline"]
+        elif current_class == "standard" and target_class == "coldline":
+            # Direct Standard → Coldline transition (use same cost as standard_to_nearline for now)
+            total_transition_cost += gen_objects * pricing["lifecycle_transitions"]["standard_to_nearline"]
+        elif current_class == "standard" and target_class == "archive":
+            # Direct Standard → Archive transition (use same cost as standard_to_nearline for now)
+            total_transition_cost += gen_objects * pricing["lifecycle_transitions"]["standard_to_nearline"]
+        elif current_class == "nearline" and target_class == "coldline":
+            total_transition_cost += gen_objects * pricing["lifecycle_transitions"]["nearline_to_coldline"]
+        elif current_class == "nearline" and target_class == "archive":
+            # Direct Nearline → Archive transition (use same cost as nearline_to_coldline for now)
+            total_transition_cost += gen_objects * pricing["lifecycle_transitions"]["nearline_to_coldline"]
+        elif current_class == "coldline" and target_class == "archive":
+            total_transition_cost += gen_objects * pricing["lifecycle_transitions"]["coldline_to_archive"]
+        
+        # Update current class for next iteration
+        current_class = target_class
+    
+    return total_transition_cost
 
 
 def process_generation_autoclass(gen, storage_classes, access_rates, terminal_storage_class, month, pricing):
@@ -325,7 +384,8 @@ def simulate_storage_strategy(params, strategy_config):
                     continue
                     
                 gen_objects, retrieval_costs, transition_cost = process_generation_lifecycle(
-                    gen, storage_classes, params["access_rates"], params["pricing"], month
+                    gen, storage_classes, params["access_rates"], params["pricing"], month,
+                    strategy_config.get("lifecycle_rules")
                 )
                 total_objects += gen_objects
                 total_retrieval_cost += sum(retrieval_costs.values())
@@ -392,3 +452,46 @@ def simulate_storage_strategy(params, strategy_config):
         results.append(result)
 
     return pd.DataFrame(results)
+
+
+def process_generation_lifecycle(gen, storage_classes, access_rates, pricing, month, lifecycle_rules=None):
+    """
+    Enhanced version that handles all 10 flexible lifecycle paths while preserving
+    the corrected logic for proper storage class allocation.
+    """
+    total_objects = gen["objects"]
+    
+    # Calculate age range for this month
+    start_age = gen["age_days"]
+    end_age = start_age + 30  # Age after this month (assuming 30-day months)
+    
+    # Process all transitions within the month using flexible logic
+    storage_allocation, transitions = process_month_transitions_corrected(start_age, end_age, lifecycle_rules)
+    
+    # Apply storage allocation to storage_classes
+    for storage_class, days in storage_allocation.items():
+        portion = days / 30  # Convert days to monthly portion
+        storage_classes[storage_class] += gen["size"] * portion
+    
+    # Calculate transition costs for all transitions using flexible logic
+    transition_cost = calculate_transition_costs_corrected(transitions, gen["objects"], pricing)
+    
+    # Calculate retrieval costs based on final storage class
+    retrieval_costs = {"nearline": 0, "coldline": 0, "archive": 0}
+    
+    # Determine final storage class for retrieval cost calculation
+    final_age = end_age
+    final_class = get_storage_class_by_age(final_age, "archive", lifecycle_rules)
+    
+    if final_class == "archive" and access_rates["archive"] > 0:
+        retrieval_costs["archive"] += gen["size"] * access_rates["archive"] * pricing["retrieval_costs"]["archive"]
+    elif final_class == "coldline" and access_rates["coldline"] > 0:
+        retrieval_costs["coldline"] += gen["size"] * access_rates["coldline"] * pricing["retrieval_costs"]["coldline"]
+    elif final_class == "nearline" and access_rates["nearline"] > 0:
+        retrieval_costs["nearline"] += gen["size"] * access_rates["nearline"] * pricing["retrieval_costs"]["nearline"]
+    
+    # Age the generation for next month
+    gen["age_days"] += 30
+    
+    return total_objects, retrieval_costs, transition_cost
+

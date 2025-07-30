@@ -48,6 +48,9 @@ Thumbs.db
 # Data files
 *.csv
 *.xlsx
+
+# Development files (internal documentation, reports, etc.)
+.dev/
 *.json
 *.pkl
 

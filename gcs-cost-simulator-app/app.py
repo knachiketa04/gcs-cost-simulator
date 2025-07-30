@@ -12,6 +12,14 @@ from simulation import simulate_storage_strategy
 from reports import generate_pdf_report, generate_csv_export
 from validation import run_comprehensive_tco_validation
 
+# Import new modular components
+from lifecycle_paths import LifecyclePathManager, LifecyclePath
+from chart_components import ChartGenerator
+from analysis_engine import AnalysisEngine
+from data_processing import DataProcessor
+from configuration_manager import ConfigurationManager
+from pricing_engine import GCSPricingEngine, PricingOptimizer, RegionalPricingEngine, CostProjector
+
 
 def setup_ui_configuration():
     """Setup main UI configuration with centralized logic"""
@@ -119,23 +127,81 @@ def setup_access_pattern_config(terminal_storage_class):
 
 
 def setup_lifecycle_configuration(analysis_mode):
-    """Setup lifecycle configuration when needed"""
+    """Setup flexible lifecycle configuration with dropdown path selection"""
     lifecycle_rules = {"nearline_days": 30, "coldline_days": 90, "archive_days": 365}  # Default
     
     if analysis_mode in ["📋 Lifecycle Only", "⚖️ Side-by-Side Comparison"]:
-        st.sidebar.header("📋 Lifecycle Rules")
-        st.sidebar.markdown("*Configure custom transition rules*")
+        st.sidebar.header("📋 Flexible Lifecycle Rules")
+        st.sidebar.markdown("*Choose your optimal transition path*")
         
-        lifecycle_rules["nearline_days"] = st.sidebar.number_input("Days to Nearline", min_value=1, max_value=365, value=30, help="Days after creation to move to Nearline")
-        lifecycle_rules["coldline_days"] = st.sidebar.number_input("Days to Coldline", min_value=lifecycle_rules["nearline_days"], max_value=365, value=90, help="Days after creation to move to Coldline")
-        lifecycle_rules["archive_days"] = st.sidebar.number_input("Days to Archive", min_value=lifecycle_rules["coldline_days"], max_value=3650, value=365, help="Days after creation to move to Archive")
+        # Get available paths from the modular system
+        path_options = LifecyclePathManager.get_grouped_options()
         
-        st.sidebar.info(f"""
-        **Lifecycle Flow:**
-        • Standard → Nearline: {lifecycle_rules["nearline_days"]} days
-        • Nearline → Coldline: {lifecycle_rules["coldline_days"]} days  
-        • Coldline → Archive: {lifecycle_rules["archive_days"]} days
-        """)
+        # Path selection dropdown
+        selected_path_name = st.sidebar.selectbox(
+            "🛤️ Lifecycle Path",
+            options=path_options,
+            index=0,  # Default to first option (Full Linear Path)
+            help="Choose your lifecycle transition strategy"
+        )
+        
+        # Get selected path info using the modular system
+        selected_path_id = LifecyclePathManager.get_path_by_name(selected_path_name)
+        if selected_path_id:
+            selected_path = LifecyclePathManager.get_path_info(selected_path_id)
+            
+            # Display path information
+            st.sidebar.info(f"""
+            **📋 {selected_path.name}**
+            
+            🛤️ **Path**: {selected_path.path}
+            
+            💡 **Description**: {selected_path.description}
+            """)
+            
+            # Dynamic day inputs based on selected path
+            st.sidebar.markdown("**⏰ Transition Timing**")
+            
+            # Create input fields based on path structure
+            transition_days = []
+            
+            for i in range(len(selected_path.classes) - 1):
+                from_class = selected_path.classes[i]
+                to_class = selected_path.classes[i + 1]
+                
+                # Get default value
+                default_value = selected_path.default_days[i] if i < len(selected_path.default_days) else 30
+                
+                # Create input field
+                days = st.sidebar.number_input(
+                    f"Days: {from_class} → {to_class}",
+                    min_value=1,
+                    max_value=3650,
+                    value=default_value,
+                    key=f"transition_{selected_path_id}_{i}",
+                    help=f"Days after creation to transition from {from_class} to {to_class}"
+                )
+                
+                transition_days.append(days)
+            
+            # Convert to lifecycle_rules format using modular system
+            lifecycle_rules = LifecyclePathManager.convert_to_rules(selected_path_id, transition_days)
+            
+            # Show configuration status
+            st.sidebar.success("✅ Lifecycle path configured")
+            
+            # Create timeline display
+            timeline_text = ""
+            current_day = 0
+            for i, days in enumerate(transition_days):
+                from_class = selected_path.classes[i]
+                to_class = selected_path.classes[i + 1]
+                if i == 0:
+                    timeline_text += f"• Day 0-{days}: {from_class}\n"
+                timeline_text += f"• Day {current_day + 1}+: {to_class}\n"
+                current_day = days
+            
+            st.sidebar.markdown(f"**📅 Timeline:**\n{timeline_text}")
     
     return lifecycle_rules
 
@@ -186,27 +252,27 @@ def display_comparison_results(autoclass_df, lifecycle_df):
     cost_difference = autoclass_total_cost - lifecycle_total_cost
     savings_percentage = (abs(cost_difference) / max(autoclass_total_cost, lifecycle_total_cost)) * 100
     
-    # Summary metrics
+    # Summary metrics using modular formatting
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("🤖 Autoclass Total Cost", format_cost_value(autoclass_total_cost))
+        st.metric("🤖 Autoclass Total Cost", DataProcessor.format_cost_value(autoclass_total_cost))
         autoclass_final_archive = autoclass_df["Archive (GB)"].iloc[-1]
         autoclass_final_total = autoclass_df["Total Data (GB)"].iloc[-1]
-        autoclass_archive_pct = (autoclass_final_archive/autoclass_final_total*100) if autoclass_final_total > 0 else 0
-        st.caption(f"Archive usage: {autoclass_archive_pct:.1f}%")
+        autoclass_archive_pct = DataProcessor.safe_divide(autoclass_final_archive, autoclass_final_total, 0) * 100
+        st.caption(f"Archive usage: {DataProcessor.format_percentage(autoclass_archive_pct)}")
     
     with col2:
-        st.metric("📋 Lifecycle Total Cost", format_cost_value(lifecycle_total_cost))
+        st.metric("📋 Lifecycle Total Cost", DataProcessor.format_cost_value(lifecycle_total_cost))
         lifecycle_final_archive = lifecycle_df["Archive (GB)"].iloc[-1] 
         lifecycle_final_total = lifecycle_df["Total Data (GB)"].iloc[-1]
-        lifecycle_archive_pct = (lifecycle_final_archive/lifecycle_final_total*100) if lifecycle_final_total > 0 else 0
-        st.caption(f"Archive usage: {lifecycle_archive_pct:.1f}%")
+        lifecycle_archive_pct = DataProcessor.safe_divide(lifecycle_final_archive, lifecycle_final_total, 0) * 100
+        st.caption(f"Archive usage: {DataProcessor.format_percentage(lifecycle_archive_pct)}")
     
     with col3:
         if cost_difference > 0:
-            st.metric("💰 Lifecycle Savings", format_cost_value(cost_difference), f"{savings_percentage:.1f}%")
+            st.metric("💰 Lifecycle Savings", DataProcessor.format_cost_value(cost_difference), f"{DataProcessor.format_percentage(savings_percentage)}")
         else:
-            st.metric("💸 Autoclass Savings", format_cost_value(abs(cost_difference)), f"{savings_percentage:.1f}%")
+            st.metric("💸 Autoclass Savings", DataProcessor.format_cost_value(abs(cost_difference)), f"{DataProcessor.format_percentage(savings_percentage)}")
     
     # Side-by-side table comparison
     st.subheader("📊 Monthly Comparison")
@@ -232,71 +298,236 @@ def display_comparison_results(autoclass_df, lifecycle_df):
 
 
 def display_cost_analysis(autoclass_df, lifecycle_df):
-    """Display detailed cost analysis for comparison"""
+    """Display detailed cost analysis for comparison using modular analysis engine"""
     st.markdown("**Cost Analysis & Insights**")
     
-    # Cost breakdown comparison
-    autoclass_storage = autoclass_df["Storage Cost ($)"].sum()
-    autoclass_api = autoclass_df["API Cost ($)"].sum()
-    autoclass_fee = autoclass_df["Autoclass Fee ($)"].sum()
-    autoclass_total_cost = autoclass_df["Total Cost ($)"].sum()
+    # Use modular analysis engine for comprehensive comparison
+    comparison_result = AnalysisEngine.compare_strategies(autoclass_df, lifecycle_df)
     
-    lifecycle_storage = lifecycle_df["Storage Cost ($)"].sum()
-    lifecycle_api = lifecycle_df["API Cost ($)"].sum()
-    lifecycle_retrieval = lifecycle_df["Retrieval Cost ($)"].sum()
-    lifecycle_total_cost = lifecycle_df["Total Cost ($)"].sum()
+    # Cost breakdown comparison using analysis engine
+    autoclass_cost_breakdown = comparison_result['autoclass_breakdown']
+    lifecycle_cost_breakdown = comparison_result['lifecycle_breakdown']
     
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**🤖 Autoclass Breakdown**")
-        st.write(f"Storage Cost: {format_cost_value(autoclass_storage)}")
-        st.write(f"API Cost: {format_cost_value(autoclass_api)}")
-        st.write(f"Management Fee: {format_cost_value(autoclass_fee)}")
-        st.write(f"**Total: {format_cost_value(autoclass_total_cost)}**")
+        st.write(f"Storage Cost: {DataProcessor.format_cost_value(autoclass_cost_breakdown['storage'])}")
+        st.write(f"API Cost: {DataProcessor.format_cost_value(autoclass_cost_breakdown['api'])}")
+        st.write(f"Management Fee: {DataProcessor.format_cost_value(autoclass_cost_breakdown['special'])}")
+        st.write(f"**Total: {DataProcessor.format_cost_value(autoclass_cost_breakdown['total'])}**")
     
     with col2:
         st.markdown("**📋 Lifecycle Breakdown**")
-        st.write(f"Storage Cost: {format_cost_value(lifecycle_storage)}")
-        st.write(f"API Cost: {format_cost_value(lifecycle_api)}")
-        st.write(f"Retrieval Cost: {format_cost_value(lifecycle_retrieval)}")
-        st.write(f"**Total: {format_cost_value(lifecycle_total_cost)}**")
+        st.write(f"Storage Cost: {DataProcessor.format_cost_value(lifecycle_cost_breakdown['storage'])}")
+        st.write(f"API Cost: {DataProcessor.format_cost_value(lifecycle_cost_breakdown['api'])}")
+        st.write(f"Retrieval Cost: {DataProcessor.format_cost_value(lifecycle_cost_breakdown['special'])}")
+        st.write(f"**Total: {DataProcessor.format_cost_value(lifecycle_cost_breakdown['total'])}**")
     
-    # Insights
-    cost_difference = autoclass_total_cost - lifecycle_total_cost
-    savings_percentage = (abs(cost_difference) / max(autoclass_total_cost, lifecycle_total_cost)) * 100
-    
+    # Enhanced insights using analysis engine
     st.markdown("**💡 Key Insights**")
-    if cost_difference > 0:
-        st.success(f"📋 **Lifecycle policy saves {format_cost_value(cost_difference)} ({savings_percentage:.1f}%)**")
-        st.info("Lifecycle policies are more cost-effective for this scenario due to no management fees and predictable time-based transitions.")
+    winner = comparison_result['winner']
+    savings_pct = comparison_result['savings_percentage']
+    cost_difference = comparison_result['cost_difference']
+    
+    if winner == "Lifecycle":
+        st.success(f"""📋 **Lifecycle policy saves {DataProcessor.format_cost_value(cost_difference)} ({DataProcessor.format_percentage(savings_pct)})**
+        
+{comparison_result['recommendation']}""")
     else:
-        st.success(f"🤖 **Autoclass saves {format_cost_value(abs(cost_difference))} ({savings_percentage:.1f}%)**")
-        st.info("Autoclass is more cost-effective due to intelligent access pattern optimization and no retrieval costs.")
+        st.success(f"""🤖 **Autoclass saves {DataProcessor.format_cost_value(cost_difference)} ({DataProcessor.format_percentage(savings_pct)})**
+        
+{comparison_result['recommendation']}""")
     
-    # Additional insights
-    retrieval_impact = (lifecycle_retrieval / lifecycle_total_cost * 100) if lifecycle_total_cost > 0 else 0
-    management_impact = (autoclass_fee / autoclass_total_cost * 100) if autoclass_total_cost > 0 else 0
-    
-    st.write(f"• Lifecycle retrieval costs: {retrieval_impact:.1f}% of total cost")
-    st.write(f"• Autoclass management fee: {management_impact:.1f}% of total cost")
+    # Generate strategic insights using analysis engine
+    comparison_insights = AnalysisEngine.generate_comparison_insights(comparison_result)
+    for insight in comparison_insights:
+        st.write(f"• {insight}")
 
 
-def display_single_strategy_results(analysis_mode, df):
-    """Display results for single strategy analysis"""
+def display_single_strategy_results(df, analysis_mode, lifecycle_rules=None):
+    """Enhanced display results for single strategy analysis with lifecycle path info"""
     strategy_name = "Autoclass" if analysis_mode == "🤖 Autoclass Only" else "Lifecycle"
-    st.subheader(f"📊 {strategy_name} Monthly Breakdown")
+    
+    # Enhanced header with path information for lifecycle
+    if analysis_mode == "📋 Lifecycle Only" and lifecycle_rules:
+        path_name = lifecycle_rules.get("path_name", "Custom Path")
+        path_description = lifecycle_rules.get("path_description", "")
+        
+        st.subheader(f"📊 {strategy_name} Monthly Breakdown")
+        
+        # Display selected path information
+        st.info(f"""
+        **🛤️ Selected Path**: {path_name}
+        
+        **💡 Strategy**: {path_description}
+        
+        **📅 Transition Timeline**: {create_lifecycle_timeline_display(lifecycle_rules)}
+        """)
+    else:
+        st.subheader(f"📊 {strategy_name} Monthly Breakdown")
 
     # Create and display dataframe
     mode_key = "autoclass" if analysis_mode == "🤖 Autoclass Only" else "lifecycle"
     display_df = create_display_dataframe(df, mode_key)
     st.dataframe(display_df, use_container_width=True)
 
-    # Summary
+    # Enhanced summary with path-specific insights
     total_cost = df["Total Cost ($)"].sum()
     st.markdown(f"### 💰 Total {len(df)}-Month {strategy_name} Cost: **{format_cost_value(total_cost)}**")
 
-    # Cost Breakdown Summary
+    # Enhanced cost breakdown with lifecycle insights
+    if analysis_mode == "📋 Lifecycle Only" and lifecycle_rules:
+        display_lifecycle_insights(df, lifecycle_rules)
+    else:
+        display_standard_cost_breakdown(df, analysis_mode)
+
+
+def create_lifecycle_timeline_display(lifecycle_rules):
+    """Create a timeline display for the selected lifecycle path"""
+    if not lifecycle_rules:
+        return "Standard lifecycle progression"
+    
+    path_classes = lifecycle_rules.get("path_classes", ["Standard", "Archive"])
+    transition_days = lifecycle_rules.get("transition_days", [365])
+    
+    timeline = ""
+    for i, days in enumerate(transition_days):
+        from_class = path_classes[i]
+        to_class = path_classes[i + 1]
+        
+        if i == 0:
+            timeline += f"Day 0-{days}: {from_class} → "
+        timeline += f"Day {days}+: {to_class}"
+        if i < len(transition_days) - 1:
+            timeline += " → "
+    
+    return timeline
+
+
+def display_lifecycle_insights(df, lifecycle_rules):
+    """Display enhanced insights for lifecycle strategy with path-specific analysis"""
+    st.subheader("💸 Lifecycle Strategy Analysis")
+    
+    # Basic cost breakdown
+    total_cost = df["Total Cost ($)"].sum()
+    total_storage = df["Storage Cost ($)"].sum()
+    total_api = df["API Cost ($)"].sum()
+    total_retrieval = df["Retrieval Cost ($)"].sum()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Storage Cost", format_cost_value(total_storage))
+        st.metric("API Cost", format_cost_value(total_api))
+    with col2:
+        st.metric("Retrieval Cost", format_cost_value(total_retrieval))
+    with col3:
+        st.metric("**Total Cost**", f"**{format_cost_value(total_cost)}**")
+    
+    # Path-specific insights
+    path_name = lifecycle_rules.get("path_name", "Custom Path")
+    path_classes = lifecycle_rules.get("path_classes", ["Standard", "Archive"])
+    
+    st.subheader("🎯 Path-Specific Insights")
+    
+    # Calculate final distribution
+    final_month = df.iloc[-1]
+    storage_distribution = {
+        "Standard": final_month["Standard (GB)"],
+        "Nearline": final_month["Nearline (GB)"],
+        "Coldline": final_month["Coldline (GB)"],
+        "Archive": final_month["Archive (GB)"]
+    }
+    
+    total_data = sum(storage_distribution.values())
+    
+    # Show distribution for classes in the path
+    st.markdown("**📊 Final Storage Distribution:**")
+    for storage_class in path_classes:
+        if storage_class.lower() in ["standard", "nearline", "coldline", "archive"]:
+            class_key = storage_class.title()
+            if class_key in storage_distribution:
+                amount = storage_distribution[class_key]
+                percentage = (amount / total_data * 100) if total_data > 0 else 0
+                st.metric(
+                    f"{class_key} Storage",
+                    f"{format_storage_value(amount)} ({percentage:.1f}%)"
+                )
+    
+    # Path efficiency analysis
+    st.subheader("⚡ Path Efficiency Analysis")
+    
+    # Calculate average cost per GB
+    avg_cost_per_gb = total_cost / total_data if total_data > 0 else 0
+    
+    # Determine path efficiency based on final distribution
+    archive_percentage = (storage_distribution["Archive"] / total_data * 100) if total_data > 0 else 0
+    
+    efficiency_rating = "🟢 Highly Efficient" if archive_percentage > 70 else \
+                       "🟡 Moderately Efficient" if archive_percentage > 30 else \
+                       "🔴 Conservative"
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Average Cost per GB", f"${avg_cost_per_gb:.4f}")
+        st.metric("Archive Utilization", f"{archive_percentage:.1f}%")
+    with col2:
+        st.metric("Efficiency Rating", efficiency_rating)
+        st.metric("Path Complexity", f"{len(path_classes)} storage tiers")
+    
+    # Recommendations based on path type
+    display_path_recommendations(lifecycle_rules, storage_distribution, total_data)
+
+
+def display_path_recommendations(lifecycle_rules, storage_distribution, total_data):
+    """Display recommendations based on the selected lifecycle path"""
+    st.subheader("💡 Optimization Recommendations")
+    
+    path_id = lifecycle_rules.get("path_id", "")
+    
+    recommendations = []
+    
+    # Analyze distribution and provide recommendations
+    archive_percentage = (storage_distribution["Archive"] / total_data * 100) if total_data > 0 else 0
+    standard_percentage = (storage_distribution["Standard"] / total_data * 100) if total_data > 0 else 0
+    
+    if "std_arc" in path_id:  # Direct Standard → Archive
+        if standard_percentage > 50:
+            recommendations.append("⚡ Consider reducing transition time to Archive for better cost optimization")
+        else:
+            recommendations.append("✅ Direct Archive transition is working efficiently")
+    
+    elif "std_cld" in path_id:  # Standard → Coldline paths
+        coldline_percentage = (storage_distribution["Coldline"] / total_data * 100) if total_data > 0 else 0
+        if coldline_percentage > 60:
+            recommendations.append("✅ Coldline strategy is effectively reducing storage costs")
+        if standard_percentage > 30:
+            recommendations.append("⚡ Consider faster transition to Coldline for additional savings")
+    
+    elif "full_linear" in path_id:  # Full linear path
+        if archive_percentage < 30:
+            recommendations.append("⚡ Consider more aggressive transition timing for better cost optimization")
+        else:
+            recommendations.append("✅ Balanced progression through all storage tiers")
+    
+    # General recommendations
+    if standard_percentage > 40:
+        recommendations.append("💡 High Standard storage usage - consider faster transitions for cost savings")
+    
+    if archive_percentage > 80:
+        recommendations.append("🎯 Excellent archive utilization - optimal for long-term storage")
+    
+    # Display recommendations
+    if recommendations:
+        for rec in recommendations:
+            st.markdown(f"- {rec}")
+    else:
+        st.markdown("- ✅ Your current lifecycle path appears well-optimized for your data pattern")
+
+
+def display_standard_cost_breakdown(df, analysis_mode):
+    """Display standard cost breakdown for non-lifecycle strategies"""
     st.subheader("💸 Cost Breakdown Summary")
+    total_cost = df["Total Cost ($)"].sum()
     total_storage = df["Storage Cost ($)"].sum()
     total_api = df["API Cost ($)"].sum()
     
@@ -320,167 +551,6 @@ def display_single_strategy_results(analysis_mode, df):
             st.metric("Retrieval Cost", format_cost_value(total_retrieval))
         with col3:
             st.metric("**Total Cost**", f"**{format_cost_value(total_cost)}**")
-
-
-def create_comparison_charts(autoclass_df, lifecycle_df):
-    """Create side-by-side comparison charts"""
-    st.subheader("📈 Side-by-Side Visual Comparison")
-    
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
-    
-    # Determine units for charts
-    max_autoclass_data = autoclass_df["Total Data (GB)"].max()
-    max_lifecycle_data = lifecycle_df["Total Data (GB)"].max()
-    max_data = max(max_autoclass_data, max_lifecycle_data)
-    storage_unit_factor, storage_unit = get_storage_unit_and_value(max_data)
-    
-    # Convert data for charts
-    if storage_unit == "TiB":
-        autoclass_factor = 1024
-        lifecycle_factor = 1024
-        storage_label = "TiB Stored"
-    else:
-        autoclass_factor = 1
-        lifecycle_factor = 1
-        storage_label = "GB Stored"
-    
-    # Autoclass data distribution
-    ax1.plot(autoclass_df["Month"], autoclass_df["Standard (GB)"] / autoclass_factor, label="Standard", linewidth=2)
-    ax1.plot(autoclass_df["Month"], autoclass_df["Nearline (GB)"] / autoclass_factor, label="Nearline", linewidth=2)
-    ax1.plot(autoclass_df["Month"], autoclass_df["Coldline (GB)"] / autoclass_factor, label="Coldline", linewidth=2)
-    ax1.plot(autoclass_df["Month"], autoclass_df["Archive (GB)"] / autoclass_factor, label="Archive", linewidth=2)
-    ax1.set_ylabel(storage_label)
-    ax1.set_title("🤖 Autoclass Data Distribution")
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Lifecycle data distribution
-    ax2.plot(lifecycle_df["Month"], lifecycle_df["Standard (GB)"] / lifecycle_factor, label="Standard", linewidth=2)
-    ax2.plot(lifecycle_df["Month"], lifecycle_df["Nearline (GB)"] / lifecycle_factor, label="Nearline", linewidth=2)
-    ax2.plot(lifecycle_df["Month"], lifecycle_df["Coldline (GB)"] / lifecycle_factor, label="Coldline", linewidth=2)
-    ax2.plot(lifecycle_df["Month"], lifecycle_df["Archive (GB)"] / lifecycle_factor, label="Archive", linewidth=2)
-    ax2.set_ylabel(storage_label)
-    ax2.set_title("📋 Lifecycle Data Distribution")
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    
-    # Cost comparison
-    max_autoclass_cost = autoclass_df["Total Cost ($)"].max()
-    max_lifecycle_cost = lifecycle_df["Total Cost ($)"].max()
-    max_cost = max(max_autoclass_cost, max_lifecycle_cost)
-    cost_unit_factor, cost_unit = get_cost_unit_and_value(max_cost)
-    
-    cost_factor = 1000000 if cost_unit == "M" else 1
-    cost_label = "Cost ($M)" if cost_unit == "M" else "Cost ($)"
-    
-    ax3.plot(autoclass_df["Month"], autoclass_df["Total Cost ($)"] / cost_factor, label="🤖 Autoclass", linewidth=3, color='blue')
-    ax3.plot(lifecycle_df["Month"], lifecycle_df["Total Cost ($)"] / cost_factor, label="📋 Lifecycle", linewidth=3, color='red')
-    ax3.set_ylabel(cost_label)
-    ax3.set_title("💰 Total Cost Comparison")
-    ax3.legend()
-    ax3.grid(True, alpha=0.3)
-    
-    # Cost difference over time
-    cost_difference = autoclass_df["Total Cost ($)"] - lifecycle_df["Total Cost ($)"]
-    ax4.plot(autoclass_df["Month"], cost_difference / cost_factor, linewidth=2, color='green')
-    ax4.axhline(y=0, color='black', linestyle='--', alpha=0.5)
-    ax4.set_ylabel(f"Cost Difference ({cost_label.split('(')[1]}")
-    ax4.set_xlabel("Month")
-    ax4.set_title("💸 Cost Difference (Autoclass - Lifecycle)")
-    ax4.grid(True, alpha=0.3)
-    
-    # Add annotation for positive/negative regions
-    if cost_difference.iloc[-1] > 0:
-        ax4.text(0.7, 0.9, "Lifecycle\nSaves Money", transform=ax4.transAxes, 
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.7),
-                verticalalignment='top')
-    else:
-        ax4.text(0.7, 0.1, "Autoclass\nSaves Money", transform=ax4.transAxes,
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7),
-                verticalalignment='bottom')
-    
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    st.pyplot(fig)
-
-
-def create_single_strategy_charts(df, analysis_mode):
-    """Create charts for single strategy analysis"""
-    strategy_name = "Autoclass" if analysis_mode == "🤖 Autoclass Only" else "Lifecycle"
-    st.subheader(f"🪄 {strategy_name} Data Growth Over Time")
-    
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
-    
-    # Determine appropriate storage unit for chart
-    max_total_data = df["Total Data (GB)"].max()
-    storage_unit_factor, storage_unit = get_storage_unit_and_value(max_total_data)
-    
-    # Convert data for chart display
-    if storage_unit == "TiB":
-        chart_data_standard = df["Standard (GB)"] / 1024
-        chart_data_nearline = df["Nearline (GB)"] / 1024
-        chart_data_coldline = df["Coldline (GB)"] / 1024
-        chart_data_archive = df["Archive (GB)"] / 1024
-        chart_data_total = df["Total Data (GB)"] / 1024
-        storage_label = "TiB Stored"
-    else:
-        chart_data_standard = df["Standard (GB)"]
-        chart_data_nearline = df["Nearline (GB)"]
-        chart_data_coldline = df["Coldline (GB)"]
-        chart_data_archive = df["Archive (GB)"]
-        chart_data_total = df["Total Data (GB)"]
-        storage_label = "GB Stored"
-    
-    # Data distribution chart
-    ax1.plot(df["Month"], chart_data_standard, label="Standard", linewidth=2)
-    ax1.plot(df["Month"], chart_data_nearline, label="Nearline", linewidth=2)
-    ax1.plot(df["Month"], chart_data_coldline, label="Coldline", linewidth=2)
-    ax1.plot(df["Month"], chart_data_archive, label="Archive", linewidth=2)
-    ax1.plot(df["Month"], chart_data_total, label="Total", linestyle="--", alpha=0.7)
-    ax1.set_ylabel(storage_label)
-    ax1.set_title("Data Distribution Across Storage Classes")
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Determine appropriate cost unit for chart
-    max_total_cost = df["Total Cost ($)"].max()
-    cost_unit_factor, cost_unit = get_cost_unit_and_value(max_total_cost)
-    
-    # Convert cost data for chart display
-    if cost_unit == "M":
-        chart_cost_storage = df["Storage Cost ($)"] / 1000000
-        if analysis_mode == "🤖 Autoclass Only":
-            chart_cost_special = df["Autoclass Fee ($)"] / 1000000
-            special_label = "Autoclass Fee"
-        else:
-            chart_cost_special = df["Retrieval Cost ($)"] / 1000000
-            special_label = "Retrieval Cost"
-        chart_cost_total = df["Total Cost ($)"] / 1000000
-        cost_label = "Cost ($M)"
-    else:
-        chart_cost_storage = df["Storage Cost ($)"]
-        if analysis_mode == "🤖 Autoclass Only":
-            chart_cost_special = df["Autoclass Fee ($)"]
-            special_label = "Autoclass Fee"
-        else:
-            chart_cost_special = df["Retrieval Cost ($)"]
-            special_label = "Retrieval Cost"
-        chart_cost_total = df["Total Cost ($)"]
-        cost_label = "Cost ($)"
-    
-    # Cost breakdown chart
-    ax2.plot(df["Month"], chart_cost_storage, label="Storage", linewidth=2)
-    ax2.plot(df["Month"], chart_cost_special, label=special_label, linewidth=2)
-    ax2.plot(df["Month"], chart_cost_total, label="Total", linestyle="--", alpha=0.7)
-    ax2.set_ylabel(cost_label)
-    ax2.set_xlabel("Month")
-    ax2.set_title("Monthly Cost Breakdown")
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    st.pyplot(fig)
 
 
 def display_export_options(analysis_mode, autoclass_df=None, lifecycle_df=None, 
@@ -579,11 +649,48 @@ def main():
         "access_rates": access_rates
     }
     
+    # Enhanced configuration validation using modular ConfigurationManager
+    st.subheader("🔍 Enhanced Configuration Validation")
+    
+    # Validate simulation configuration
+    sim_config = {
+        'simulation_months': config['months'],
+        'initial_data_gb': config['initial_data_gb'],
+        'monthly_upload_gb': config.get('monthly_upload_gb', 100),  # Default if not present
+        'data_growth_rate': config.get('monthly_growth_rate', 0) * 12  # Convert to annual
+    }
+    
+    is_valid, validation_errors = ConfigurationManager.validate_simulation_config(sim_config)
+    if not is_valid:
+        for error in validation_errors:
+            st.error(f"⚠️ Configuration Error: {error}")
+        st.stop()
+    
+    # Validate access pattern if present
+    if 'access_rates' in config:
+        access_pattern = {
+            'monthly_delete_gb': config.get('monthly_delete_gb', 0),
+            'monthly_read_gb': config.get('monthly_read_gb', 50),
+            'monthly_read_ops': config.get('monthly_read_ops', 1000)
+        }
+        
+        is_access_valid, access_errors = ConfigurationManager.validate_access_pattern(access_pattern)
+        if not is_access_valid:
+            for error in access_errors:
+                st.warning(f"⚠️ Access Pattern Warning: {error}")
+    
+    # Show configuration impact estimation
+    impact_analysis = ConfigurationManager.estimate_configuration_impact(sim_config)
+    if impact_analysis:
+        with st.expander("💡 Configuration Impact Analysis", expanded=False):
+            for category, impact in impact_analysis.items():
+                st.info(f"**{category.title()}**: {impact}")
+    
     # Show progress for longer simulations
     if config["months"] > 36:
         st.info(f"⏳ Running {config['months']}-month simulation... This may take a moment for longer periods.")
 
-    # Run comprehensive TCO validation
+    # Run comprehensive TCO validation (original validation still included)
     st.subheader("🔍 TCO Configuration Validation")
     warnings, errors = run_comprehensive_tco_validation(analysis_mode, config, terminal_storage_class, lifecycle_rules)
     
@@ -605,15 +712,15 @@ def main():
     # Display results based on analysis mode
     if analysis_mode == "⚖️ Side-by-Side Comparison":
         display_comparison_results(autoclass_df, lifecycle_df)
-        create_comparison_charts(autoclass_df, lifecycle_df)
+        ChartGenerator.create_comparison_dashboard(autoclass_df, lifecycle_df)
         
         # Key insights for comparison mode handled in display_cost_analysis
         
     else:
         # Single strategy results
         df = autoclass_df if analysis_mode == "🤖 Autoclass Only" else lifecycle_df
-        display_single_strategy_results(analysis_mode, df)
-        create_single_strategy_charts(df, analysis_mode)
+        display_single_strategy_results(df, analysis_mode, lifecycle_rules if analysis_mode == "📋 Lifecycle Only" else None)
+        ChartGenerator.create_single_strategy_charts(df, analysis_mode)
         
         # Key insights for single strategy
         st.subheader("🔍 Key Insights")

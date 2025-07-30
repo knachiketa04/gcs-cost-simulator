@@ -1,109 +1,101 @@
-# 🚀 GCS Storage Strategy Simulator
+# GCS Cost Simulator
 
-## ⚠️ **Educational Disclaimer**
+A web application for analyzing and comparing Google Cloud Storage costs across different storage strategies.
 
-**This tool is designed for educational purposes and cost estimation guidance only.** While it models GCS pricing and behavior based on publicly available Google Cloud documentation, it should not be used as the sole basis for commercial decisions or production deployments.
+> **⚠️ Disclaimer**: This tool is for educational and estimation purposes only. It is not an official Google Cloud calculator. For final pricing and production planning, please refer to the [official Google Cloud Storage pricing page](https://cloud.google.com/storage/pricing) and use the [Google Cloud Pricing Calculator](https://cloud.google.com/products/calculator).
 
-**For commercial use and production environments:**
+## 🚀 Features
 
-- Always conduct thorough testing with your actual data and access patterns
-- Consult official [Google Cloud Storage documentation](https://cloud.google.com/storage/docs)
-- Validate pricing with the [Google Cloud Pricing Calculator](https://cloud.google.com/products/calculator)
-- Consider engaging with Google Cloud specialists for enterprise scenarios
+- **Strategy Comparison**: Compare Autoclass vs. Lifecycle policies side-by-side
+- **Individual Analysis**: Deep dive into specific storage approaches
+- **Interactive Charts**: Visual cost breakdowns and trends
+- **Cost Optimization**: Identify the most cost-effective strategy
+- **Export Reports**: CSV data and PDF reports
+- **Real-time Validation**: Configuration validation with recommendations
 
-**The authors are not responsible for any costs or issues arising from decisions based solely on this simulator.**
+## 📊 Storage Strategies
 
----
+**Autoclass**: Automatic tier transitions based on access patterns  
+**Lifecycle**: Manual tier transition rules with fine-grained control
 
-Streamlit application that compares Google Cloud Storage (GCS) Autoclass vs Lifecycle Policies with comprehensive cost modeling, intelligent unit scaling, and realistic API operation charges.
+## 🛠️ Installation
 
-## ✨ Key Features
+### Prerequisites
 
-### 🔄 **Three Analysis Modes**
+- Python 3.8+
 
-- **🤖 Autoclass Only**: Intelligent, access-based storage optimization with configurable terminal storage class
-- **📋 Lifecycle Only**: Time-based storage transitions with custom transition rules
-- **⚖️ Side-by-Side Comparison**: Direct cost and performance comparison with strategic insights
-
-### 💰 **Comprehensive Cost Modeling**
-
-- **Accurate GCS Pricing**: Regional pricing (default: Iowa us-central1) with full customization
-- **Automatic Upload Costs**: Class A operation charges calculated for monthly data uploads
-- **Strategy-Specific Costs**: Autoclass management fees vs lifecycle retrieval costs
-- **Transition Operations**: Proper modeling of lifecycle and autoclass transition charges
-- **Object Size Compliance**: Strict 128 KiB Autoclass eligibility enforcement
-
-### 📊 **Smart Analytics & Export**
-
-- **Detailed API Breakdown**: Upload, user-defined, and system transition operations tracked separately
-- **Auto-Scaling Units**: Intelligent GB→TiB, $→$M scaling for large datasets
-- **Professional Reports**: PDF executive summaries with comprehensive cost breakdowns
-- **Raw Data Export**: CSV export for further analysis and integration
-- **TCO Validation**: Comprehensive error checking and configuration warnings
-
-## 🚀 Quick Start
+### Setup
 
 ```bash
 git clone https://github.com/knachiketa04/gcs-cost-simulator.git
 cd gcs-cost-simulator
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-streamlit run gcs-cost-simulator-app/app.py
+cd gcs-cost-simulator-app
+streamlit run app.py
 ```
 
-## 🏗️ Architecture
+Access at `http://localhost:8501`
 
-Clean, modular design with 6 focused components:
+## 🎯 Usage
+
+1. **Configure**: Set data size, growth rate, simulation duration, access patterns
+2. **Analyze**: Choose side-by-side comparison or individual strategy analysis
+3. **Review**: View cost breakdowns, charts, and strategic recommendations
+4. **Export**: Generate CSV data or PDF reports
+
+## 📁 Architecture
 
 ```
-gcs-cost-simulator/
-├── README.md & LICENSE         # Documentation
-├── requirements.txt            # Dependencies
-└── gcs-cost-simulator-app/     # Core application (6 files)
-    ├── app.py                  # 🎯 Streamlit UI & orchestration
-    ├── simulation.py           # 🧮 Generation-based cost modeling
-    ├── reports.py              # 📄 PDF/CSV export with templates
-    ├── utils.py                # 🛠️ Smart formatting & UI helpers
-    ├── config.py               # ⚙️ Pricing schemas & defaults
-    └── validation.py           # ✅ TCO-focused input validation
+gcs-cost-simulator-app/
+├── app.py                    # Main Streamlit application
+├── analysis_engine.py        # Cost analysis and insights
+├── chart_components.py       # Chart generation
+├── configuration_manager.py  # Configuration validation
+├── data_processing.py        # Data handling utilities
+├── lifecycle_paths.py        # Lifecycle path management
+├── pricing_engine.py         # GCS pricing calculations
+├── simulation.py            # Core simulation logic
+├── reports.py               # Report generation
+└── utils.py                 # Utility functions
 ```
 
-**Requirements**: Python 3.8+, Streamlit 1.30.0+, Pandas, Matplotlib, ReportLab
+## 💰 Cost Analysis
 
-## 🎯 Core Capabilities
+Detailed breakdowns include:
 
-**Compare GCS storage strategies** with realistic enterprise scenarios:
+- **Storage Costs**: Per-tier storage pricing
+- **Operation Costs**: API operations (reads, writes, deletes)
+- **Retrieval Costs**: Data retrieval from cold storage
+- **Management Fees**: Autoclass overhead
 
-- **Data Growth Modeling**: TB-scale datasets with configurable monthly growth (0-50%)
-- **Realistic API Costing**: Automatic Class A upload operations plus user-defined operations
-- **Access Pattern Configuration**: Conditional UI adapts based on terminal storage and access rates
-- **Generation-Based Tracking**: Accurate data aging and lifecycle cost calculations
-- **Long-Term Analysis**: 12-60 month simulations with generation optimization for performance
+## 🔧 Storage Tiers
 
-### 🎨 **Advanced Features**
+- **Standard**: Frequently accessed data
+- **Nearline**: Monthly access patterns
+- **Coldline**: Quarterly access patterns
+- **Archive**: Annual access patterns
 
-- **Terminal Storage Configuration**: Nearline (GCS default) or Archive terminal classes
-- **Smart UI Logic**: Conditional controls hide irrelevant options based on configuration
-- **Cost Impact Analysis**: High-impact warnings for configurations affecting >30% of costs
-- **Chart Visualization**: Side-by-side data distribution and cost comparison charts
+## 📈 Export Options
 
-## 📊 Default Configuration
+- **CSV Export**: Raw simulation data
+- **PDF Reports**: Formatted reports with charts
+- **Visual Charts**: Individual chart exports
 
-- **Storage Classes**: Standard → Nearline (30d) → Coldline (90d) → Archive (365d)
-- **Access Rates**: Standard 40% hot, Nearline 20%, Coldline 15%, Archive 15%
-- **Object Sizes**: Large objects 512 KiB (Autoclass eligible), Small objects 64 KiB
-- **Terminal Storage**: Archive (full progression enabled)
-- **API Operations**: Automatic upload costs + configurable additional operations
+## 🤝 Contributing
 
-## 📜 License
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/name`)
+3. Commit changes (`git commit -am 'Add feature'`)
+4. Push branch (`git push origin feature/name`)
+5. Create Pull Request
 
-MIT License - use freely with attribution.
+## 📄 License
 
----
+MIT License - see [LICENSE](LICENSE) file for details.
 
-### 🎉 **Version 2.1 - Enhanced Cost Modeling**
+## 🔗 Links
 
-✅ **Streamlined Codebase**: 6 essential modules with clear separation of concerns  
-✅ **Realistic API Costing**: Automatic Class A upload operations + user-defined operations  
-✅ **Comprehensive Cost Tracking**: Upload, transition, and user operations tracked separately  
-✅ **Enhanced UI/UX**: Conditional controls and smart validation with minimal noise  
-✅ **Professional Export**: Template-driven PDF reports and comprehensive CSV data
+- **Repository**: https://github.com/knachiketa04/gcs-cost-simulator
+- **Issues**: https://github.com/knachiketa04/gcs-cost-simulator/issues

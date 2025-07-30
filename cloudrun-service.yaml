@@ -1,0 +1,36 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: gcs-cost-simulator
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        # Allocate more CPU for better performance
+        run.googleapis.com/cpu: "1"
+        run.googleapis.com/memory: "1Gi"
+        # Scale to zero when not in use (cost optimization)
+        run.googleapis.com/cpu-throttling: "true"
+        # Allow up to 1000 concurrent requests per instance
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: gcr.io/PROJECT_ID/gcs-cost-simulator:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi

@@ -48,7 +48,42 @@ def format_small_number(value):
     elif value < 0.001:   # Less than 1 thousandth
         return f"{value:.7f}".rstrip('0').rstrip('.')  # Remove trailing zeros
     else:
-        return f"{value:.4f}"
+        return f"{value:.6f}".rstrip('0').rstrip('.')
+
+
+def calculate_upload_operations(object_count: int, avg_object_size_kib: float) -> int:
+    """
+    Calculate the number of API operations for uploading objects to GCS.
+    
+    For large objects (>32 MiB), GCS uses multipart uploads which require
+    multiple API operations: initiate + upload parts + complete.
+    
+    Args:
+        object_count: Number of objects to upload
+        avg_object_size_kib: Average object size in KiB
+    
+    Returns:
+        Total number of Class A operations required
+    """
+    if object_count == 0:
+        return 0
+    
+    # GCS multipart upload threshold: 32 MiB (32,768 KiB)
+    multipart_threshold_kib = 32 * 1024
+    
+    if avg_object_size_kib <= multipart_threshold_kib:
+        # Simple upload: 1 operation per object
+        return object_count
+    else:
+        # Multipart upload calculation
+        # Each part is typically 16 MiB for optimal performance
+        part_size_kib = 16 * 1024  # 16 MiB in KiB
+        
+        # Operations per object: initiate (1) + parts (n) + complete (1)
+        parts_per_object = max(1, int((avg_object_size_kib + part_size_kib - 1) // part_size_kib))
+        operations_per_object = 1 + parts_per_object + 1  # initiate + parts + complete
+        
+        return object_count * operations_per_object
 
 
 def get_nested_value(dictionary, key_path):

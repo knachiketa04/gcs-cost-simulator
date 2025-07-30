@@ -607,6 +607,49 @@ def display_export_options(analysis_mode, autoclass_df=None, lifecycle_df=None,
                 )
 
 
+def setup_object_characteristics_config(analysis_mode):
+    """Setup object characteristics configuration including size inputs"""
+    st.sidebar.header("Object Characteristics")
+    
+    # First render the percentage slider
+    percent_large_objects = st.sidebar.slider(
+        "% of Data >128 KiB (Autoclass Eligible)", 
+        0, 100, 90
+    ) / 100.0
+    
+    # Add validation warning for Autoclass eligibility
+    if analysis_mode in ["🤖 Autoclass Only", "⚖️ Side-by-Side Comparison"]:
+        st.sidebar.warning("⚠️ **Autoclass Requirement**: Only objects ≥128 KiB are eligible for automatic transitions")
+    
+    # Default values
+    avg_object_size_large_kib = 512
+    avg_object_size_small_kib = 64
+    
+    # Show object size inputs based on the percentage
+    if percent_large_objects > 0:  # Show large object size input if there's any eligible data
+        max_object_size_kib = 5 * 1024 * 1024  # GCS maximum: 5 TiB in KiB
+        avg_object_size_large_kib = st.sidebar.number_input(
+            "Average Object Size for Data ≥128 KiB (KiB)", 
+            min_value=128, 
+            max_value=max_object_size_kib,
+            value=512, 
+            help="Autoclass-eligible objects must be at least 128 KiB. GCS maximum object size is 5 TiB."
+        )
+
+    if percent_large_objects < 1:  # Show small object size input if there's any non-eligible data
+        avg_object_size_small_kib = st.sidebar.number_input(
+            "Average Object Size for Data <128 KiB (KiB)", 
+            min_value=1, max_value=127, value=64,
+            help="Objects <128 KiB remain in Standard storage permanently in Autoclass"
+        )
+    
+    return {
+        "percent_large_objects": percent_large_objects,
+        "avg_object_size_large_kib": avg_object_size_large_kib,
+        "avg_object_size_small_kib": avg_object_size_small_kib
+    }
+
+
 def main():
     """Main application function"""
     # Setup UI configuration
@@ -615,8 +658,15 @@ def main():
     # Setup pricing configuration
     pricing = setup_pricing_configuration()
     
-    # Setup sidebar configuration
-    sidebar_config = render_sidebar_config(UI_CONFIG["sidebar"])
+    # Setup sidebar configuration (excluding object_characteristics which we'll handle separately)
+    sidebar_config_sections = {k: v for k, v in UI_CONFIG["sidebar"].items() if k != "object_characteristics"}
+    sidebar_config = render_sidebar_config(sidebar_config_sections)
+    
+    # Setup object characteristics with integrated object size inputs
+    object_config = setup_object_characteristics_config(analysis_mode)
+    
+    # Merge the configurations
+    sidebar_config.update(object_config)
     
     # Setup access patterns
     access_rates = setup_access_pattern_config(terminal_storage_class)
@@ -624,27 +674,9 @@ def main():
     # Setup lifecycle configuration
     lifecycle_rules = setup_lifecycle_configuration(analysis_mode)
     
-    # Handle object size configuration (conditional UI) with strict 128 KiB enforcement
-    avg_object_size_large_kib = 512  # Default value
-    avg_object_size_small_kib = 64   # Default value
-
-    # Add validation warning for Autoclass eligibility
-    if analysis_mode in ["🤖 Autoclass Only", "⚖️ Side-by-Side Comparison"]:
-        st.sidebar.warning("⚠️ **Autoclass Requirement**: Only objects ≥128 KiB are eligible for automatic transitions")
-
-    if sidebar_config["percent_large_objects"] > 0:  # Show large object size input if there's any eligible data
-        avg_object_size_large_kib = st.sidebar.number_input("Average Object Size for Data ≥128 KiB (KiB)", min_value=128, value=512, 
-                                                          help="Autoclass-eligible objects must be at least 128 KiB")
-
-    if sidebar_config["percent_large_objects"] < 1:  # Show small object size input if there's any non-eligible data
-        avg_object_size_small_kib = st.sidebar.number_input("Average Object Size for Data <128 KiB (KiB)", min_value=1, max_value=127, value=64,
-                                                           help="Objects <128 KiB remain in Standard storage permanently in Autoclass")
-    
     # Build complete configuration
     config = {
         **sidebar_config,
-        "avg_object_size_large_kib": avg_object_size_large_kib,
-        "avg_object_size_small_kib": avg_object_size_small_kib,
         "pricing": pricing,
         "access_rates": access_rates
     }

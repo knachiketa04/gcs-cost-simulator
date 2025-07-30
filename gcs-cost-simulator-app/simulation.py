@@ -314,8 +314,17 @@ def simulate_storage_strategy(params, strategy_config):
         cumulative_non_eligible_data += non_eligible_data
 
         # Calculate upload operations for new data (Class A operations for PUT requests)
-        upload_operations_large = eligible_objects  # Each large object upload = 1 Class A operation
-        upload_operations_small = non_eligible_objects  # Each small object upload = 1 Class A operation
+        # Import here to avoid circular imports
+        from utils import calculate_upload_operations
+        
+        upload_operations_large = calculate_upload_operations(
+            int(eligible_objects), 
+            params["avg_object_size_large_kib"]
+        )
+        upload_operations_small = calculate_upload_operations(
+            int(non_eligible_objects), 
+            params["avg_object_size_small_kib"]
+        )
         total_upload_operations = upload_operations_large + upload_operations_small
         upload_api_cost = total_upload_operations * params["pricing"]["operations"]["class_a"]
 
